@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Env
+.env
+.env*.local
+
+# Data yang sensitif / spesifik per-server - JANGAN pernah kecommit
+# (config.json nyimpen db_root_password + github token, jobs.json/db-registry.json
+# nyimpen state runtime spesifik server ini)
+data/config.json
+data/jobs.json
+data/db-registry.json
+*.log
+
+# Logs
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Backup dumps kalau kebetulan kegenerate di folder repo
+*.sql
+*.sql.gz

@@ -393,6 +393,48 @@ async function configurationMenu() {
   ]);
 
   if (nextAction === 'edit') {
+    await configEditCategoryMenu();
+    return;
+  } else if (nextAction === 'github') {
+    await githubAccountsMenu();
+    return;
+  }
+
+  await afterAction(configurationMenu);
+}
+
+/**
+ * Submenu kategori buat edit config. Dipecah per-kategori (bukan satu form
+ * raksasa) karena config.json sekarang punya 15+ field - kalau digabung jadi
+ * satu form prompt-berturut-turut bakal kepanjangan & gampang salah pencet di
+ * layar HP. Tiap kategori nyimpen sendiri-sendiri terus balik ke sini lagi,
+ * biar bisa ubah beberapa kategori berturut-turut tanpa ulang dari awal.
+ */
+async function configEditCategoryMenu() {
+  const cfg = config.loadConfig();
+  const { category } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'category',
+      message: 'Kategori mana yang mau diubah?',
+      choices: [
+        { name: 'Deploy & Git (deploy_user, default_folder, git_branch, starting_port)', value: 'deploy' },
+        { name: 'Nginx (nginx_user, nginx_binary, nginx_conf_dir, nginx_log_dir)', value: 'nginx' },
+        { name: 'SSL / Certbot (certbot_webroot, certbot_email)', value: 'ssl' },
+        { name: 'Database (db_root_user, db_root_password)', value: 'database' },
+        { name: 'Backup (backup_dir, backup_retention_days)', value: 'backup' },
+        { name: 'Runtime Default (node, php)', value: 'runtime' },
+        { name: '↩️  Kembali', value: 'back' },
+      ],
+    },
+  ]);
+
+  if (category === 'back') {
+    await configurationMenu();
+    return;
+  }
+
+  if (category === 'deploy') {
     const { deploy_user, default_folder, git_branch, starting_port } = await inquirer.prompt([
       { type: 'input', name: 'deploy_user', message: 'Deploy user:', default: cfg.deploy_user },
       { type: 'input', name: 'default_folder', message: 'Default folder:', default: cfg.default_folder },
@@ -400,13 +442,66 @@ async function configurationMenu() {
       { type: 'number', name: 'starting_port', message: 'Starting port:', default: cfg.starting_port },
     ]);
     config.saveConfig({ ...cfg, deploy_user, default_folder, git_branch, starting_port });
-    logger.success('Konfigurasi disimpan.');
-  } else if (nextAction === 'github') {
-    await githubAccountsMenu();
-    return;
+    logger.success('Konfigurasi Deploy & Git disimpan.');
+  } else if (category === 'nginx') {
+    logger.info(
+      'nginx_binary & nginx_conf_dir beda-beda tergantung server: aaPanel biasanya ' +
+      '/www/server/nginx/sbin/nginx & /www/server/panel/vhost/nginx, sedangkan Ubuntu/Debian ' +
+      'nginx bawaan apt biasanya /usr/sbin/nginx & /etc/nginx/sites-available. Cek dulu kalau ragu: ' +
+      '"which nginx" dan "ls /etc/nginx" lewat menu Buka Terminal.'
+    );
+    const { nginx_user, nginx_binary, nginx_conf_dir, nginx_log_dir } = await inquirer.prompt([
+      { type: 'input', name: 'nginx_user', message: 'Nginx user:', default: cfg.nginx_user },
+      { type: 'input', name: 'nginx_binary', message: 'Path binary nginx:', default: cfg.nginx_binary },
+      { type: 'input', name: 'nginx_conf_dir', message: 'Folder config vhost nginx:', default: cfg.nginx_conf_dir },
+      { type: 'input', name: 'nginx_log_dir', message: 'Folder log nginx:', default: cfg.nginx_log_dir },
+    ]);
+    config.saveConfig({ ...cfg, nginx_user, nginx_binary, nginx_conf_dir, nginx_log_dir });
+    logger.success('Konfigurasi Nginx disimpan.');
+  } else if (category === 'ssl') {
+    const { certbot_webroot, certbot_email } = await inquirer.prompt([
+      { type: 'input', name: 'certbot_webroot', message: 'Certbot webroot:', default: cfg.certbot_webroot },
+      { type: 'input', name: 'certbot_email', message: 'Email certbot (buat notifikasi expiry):', default: cfg.certbot_email },
+    ]);
+    config.saveConfig({ ...cfg, certbot_webroot, certbot_email });
+    logger.success('Konfigurasi SSL/Certbot disimpan.');
+  } else if (category === 'database') {
+    logger.info(
+      'Kalau MySQL/MariaDB root-nya pakai auth_socket (nggak bisa login password), pakai menu ' +
+      '"Setup User Admin DB (fix auth_socket)" di Database Manager - itu otomatis tes koneksi dulu ' +
+      'sebelum simpan ke sini. Ubah manual di sini cuma kalau kamu yakin user/password-nya valid.'
+    );
+    const { db_root_user, changePassword } = await inquirer.prompt([
+      { type: 'input', name: 'db_root_user', message: 'Database root user:', default: cfg.db_root_user },
+      { type: 'confirm', name: 'changePassword', message: 'Ganti password juga?', default: false },
+    ]);
+    let db_root_password = cfg.db_root_password;
+    if (changePassword) {
+      const { password } = await inquirer.prompt([
+        { type: 'password', name: 'password', mask: '*', message: 'Password baru:' },
+      ]);
+      db_root_password = password;
+    }
+    config.saveConfig({ ...cfg, db_root_user, db_root_password });
+    logger.success('Konfigurasi Database disimpan.');
+  } else if (category === 'backup') {
+    const { backup_dir, backup_retention_days } = await inquirer.prompt([
+      { type: 'input', name: 'backup_dir', message: 'Folder backup:', default: cfg.backup_dir },
+      { type: 'number', name: 'backup_retention_days', message: 'Retensi backup (hari):', default: cfg.backup_retention_days },
+    ]);
+    config.saveConfig({ ...cfg, backup_dir, backup_retention_days });
+    logger.success('Konfigurasi Backup disimpan.');
+  } else if (category === 'runtime') {
+    const runtimeDefault = cfg.runtime_default || {};
+    const { node, php } = await inquirer.prompt([
+      { type: 'input', name: 'node', message: 'Versi Node.js default:', default: runtimeDefault.node },
+      { type: 'input', name: 'php', message: 'Versi PHP default:', default: runtimeDefault.php },
+    ]);
+    config.saveConfig({ ...cfg, runtime_default: { ...runtimeDefault, node, php } });
+    logger.success('Konfigurasi Runtime Default disimpan.');
   }
 
-  await afterAction(configurationMenu);
+  await configEditCategoryMenu();
 }
 
 /**
