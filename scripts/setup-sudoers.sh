@@ -105,6 +105,13 @@ BIN_CP="$(resolve_bin cp)"
 BIN_LN="$(resolve_bin ln)"
 BIN_MKDIR="$(resolve_bin mkdir)"
 BIN_RM="$(resolve_bin rm)"
+# FIXED: src/deploy/deployNew.js step "Siapkan Folder" manggil
+# `sudo chown -R deployUser:deployUser folderPath` SETELAH mkdir, tapi
+# `chown` sebelumnya gak pernah dicantumkan di rule (root) di bawah -
+# akibatnya SETIAP deploy project baru gagal persis di step ini dengan
+# "sudo: a terminal is required to read the password", walau mkdir-nya
+# sendiri sukses (mkdir ADA di rule, chown enggak).
+BIN_CHOWN="$(resolve_bin chown)"
 BIN_TEST="$(resolve_bin test)"
 # FIXED: src/doctor/doctor.js checkSudoAccess() nge-tes akses `sudo -n -u
 # ${DEPLOY_USER} true` sebagai probe read-only - tapi `/usr/bin/true` gak
@@ -184,7 +191,7 @@ ${API_USER} ALL=(${DEPLOY_USER}) NOPASSWD: /bin/rm, /usr/bin/find, /usr/bin/du, 
 # CATATAN: certbot TETAP tanpa argumen tetap karena src/ssl/ssl.js manggil dengan
 # domain/email yang dinamis (certonly -w ... -d <domain>, renew) - gak bisa di-scope
 # ke satu argumen tetap tanpa bikin fitur SSL rusak.
-${API_USER} ALL=(root) NOPASSWD: ${NGINX_BINARY} -t, ${NGINX_BINARY} -s reload, /bin/systemctl restart nginx, /bin/systemctl reload nginx, /usr/bin/certbot, /usr/bin/ss -tlnp, /bin/ss -tlnp, /usr/sbin/ufw status, /usr/bin/lsof, ${BIN_LS}, ${BIN_CAT}, ${BIN_CP}, ${BIN_LN}, ${BIN_MKDIR}, ${BIN_RM}, ${BIN_TEST}, ${BIN_GREP}, ${BIN_FAIL2BAN} status, ${BIN_PM2} list
+${API_USER} ALL=(root) NOPASSWD: ${NGINX_BINARY} -t, ${NGINX_BINARY} -s reload, /bin/systemctl restart nginx, /bin/systemctl reload nginx, /usr/bin/certbot, /usr/bin/ss -tlnp, /bin/ss -tlnp, /usr/sbin/ufw status, /usr/bin/lsof, ${BIN_LS}, ${BIN_CAT}, ${BIN_CP}, ${BIN_LN}, ${BIN_MKDIR}, ${BIN_CHOWN}, ${BIN_RM}, ${BIN_TEST}, ${BIN_GREP}, ${BIN_FAIL2BAN} status, ${BIN_PM2} list
 EOF
 
 if ! visudo -c -f "$TMP_FILE" >/dev/null 2>&1; then
