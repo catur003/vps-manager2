@@ -1,0 +1,27 @@
+{
+  "name": "vps-manager",
+  "version": "0.2.0",
+  "description": "VPS Universal Manager - Personal DevOps CLI Tool + REST API",
+  "bin": {
+    "vps-manager": "./bin/vps-manager.js",
+    "vps-api": "./bin/vps-api.js",
+    "vps-api-keygen": "./bin/vps-api-keygen.js"
+  },
+  "main": "bin/vps-manager.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node bin/vps-manager.js",
+    "api": "node bin/vps-api.js",
+    "api:keygen": "node bin/vps-api-keygen.js"
+  },
+  "dependencies": {
+    "boxen": "^5.1.2",
+    "chalk": "^4.1.2",
+    "express": "^4.19.2",
+    "inquirer": "^8.2.6",
+    "multer": "^1.4.5-lts.1"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}
