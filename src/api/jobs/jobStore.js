@@ -4,7 +4,11 @@ const crypto = require('crypto');
 const { atomicWriteJSON } = require('../../utils/safeFile');
 
 const JOBS_PATH = path.join(__dirname, '..', '..', '..', 'data', 'jobs.json');
-const SENSITIVE_KEY_PATTERN = /password|token|secret|key|envcontent/i;
+// "cloneurl" ditambahin di sini karena deploy.routes.js sekarang bisa
+// nyisipin username:token GitHub ke params.cloneUrl (lihat buildAuthenticatedUrl
+// di git.js) - tanpa "cloneurl" match regex ini, token itu bakal ke-expose
+// mentah lewat GET /jobs/:id (toPublicJob cuma redact key yang match pattern).
+const SENSITIVE_KEY_PATTERN = /password|token|secret|key|envcontent|cloneurl/i;
 const MAX_STEP_MESSAGE_LENGTH = 4000;
 
 /**

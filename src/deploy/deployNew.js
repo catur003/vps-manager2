@@ -2,8 +2,23 @@ const shell = require('../utils/shell');
 const safety = require('../safety/safety');
 const nginx = require('../nginx/nginx');
 const registry = require('../registry/registry');
+const dbRegistry = require('../registry/dbRegistry');
+const cleanup = require('../cleanup/cleanup');
 const logger = require('../utils/logger');
 const env = require('../project/env');
+
+/**
+ * Ambil nama database dari DATABASE_URL di isi .env (dipakai buat auto-link
+ * database ke project - lihat catatan di step 'registry' buildFinishSteps()).
+ * Balikin null kalau gak ketemu/gak match, TIDAK PERNAH throw.
+ */
+function extractDbNameFromEnv(envContent) {
+  if (!envContent) return null;
+  const lineMatch = envContent.match(/^\s*DATABASE_URL\s*=\s*["']?([^"'\r\n]+)["']?\s*$/m);
+  if (!lineMatch) return null;
+  const pathMatch = lineMatch[1].trim().match(/\/([a-zA-Z0-9_]+)(?:\?.*)?$/);
+  return pathMatch ? pathMatch[1] : null;
+}
 
 /**
  * Deploy project Next.js baru dari nol.
@@ -80,7 +95,20 @@ function prepareAndClone(opts, onStep = () => {}) {
     timeoutMs: 5 * 60 * 1000, // 5 menit
   });
   if (!cloneResult.ok) {
-    report('Git Clone', false, cloneResult.errorMessage);
+    // FIX: sebelumnya folder yang barusan dibuat (mkdir+chown di atas)
+    // dibiarkan nyangkut kalau clone gagal - deploy ulang berikutnya jadi
+    // langsung mental di "Safety Check" ("Folder sudah ada"), padahal
+    // folder itu masih kosong (belum pernah ke-clone apa pun ke situ).
+    // Aman dihapus di sini karena baru saja KITA yang bikin folder ini di
+    // step "Siapkan Folder" persis di atas - beda dengan kegagalan di step
+    // SETELAH clone (install/build/dll) yang sengaja TIDAK di-rollback
+    // karena folder itu sudah berisi source code asli yang mungkin masih
+    // mau diperbaiki manual (lihat catatan di komentar function ini).
+    const rollback = cleanup.deleteProjectFolder(deployUser, folderPath);
+    const rollbackNote = rollback.ok
+      ? ' Folder kosong yang sempat dibuat sudah otomatis dibersihkan - bisa langsung deploy ulang tanpa hapus folder manual.'
+      : ` Folder kosong yang sempat dibuat GAGAL dibersihkan otomatis (${rollback.errorMessage}) - mungkin masih perlu dihapus manual sebelum deploy ulang.`;
+    report('Git Clone', false, `${cloneResult.errorMessage}${rollbackNote}`);
     return { ok: false, stoppedAt: 'Git Clone', steps };
   }
   report('Git Clone', true, 'Repo berhasil di-clone.');
@@ -196,6 +224,30 @@ function buildFinishSteps(opts) {
           git_repo: gitRepo,
           git_branch: branch,
         });
+
+        // FIX (Bug: "Drop Database" pas Hapus Project gak ngefek buat project
+        // yang di-deploy lewat API/app): dbRegistry entry cuma dapet field
+        // usedByProject kalau di-set lewat menu CLI (mainMenu.js) - endpoint
+        // API create database (database.routes.js POST /) TIDAK PERNAH
+        // nyimpen field ini. Akibatnya deleteProject.js gak nemu database
+        // "terkait" project manapun yang dibuat lewat app, walau DB itu
+        // beneran dipakai (connection string-nya ditempel manual ke .env
+        // pas deploy). Di sini kita coba tebak otomatis: kalau DATABASE_URL
+        // di isi .env cocok sama salah satu dbName di dbRegistry yang BELUM
+        // ke-link ke project manapun, link-kan ke project ini. Best-effort
+        // & TIDAK FATAL - gagal/gak ketemu match gak boleh gagalin deploy.
+        try {
+          const dbName = extractDbNameFromEnv(opts.envContent);
+          if (dbName) {
+            const entry = dbRegistry.findByName(dbName);
+            if (entry && !entry.usedByProject) {
+              dbRegistry.upsertEntry({ ...entry, usedByProject: name });
+            }
+          }
+        } catch (linkErr) {
+          logger.info(`(info) Auto-link database ke project dilewati: ${linkErr.message}`);
+        }
+
         return { ok: true };
       } catch (err) {
         return { ok: false, errorMessage: err.message };

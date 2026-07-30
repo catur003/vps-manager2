@@ -2,6 +2,7 @@ const path = require('path');
 const { fork } = require('child_process');
 const express = require('express');
 const config = require('../../config/config');
+const git = require('../../git/git');
 const jobStore = require('../jobs/jobStore');
 const audit = require('../audit');
 const commandPolicy = require('../commandPolicy');
@@ -52,7 +53,38 @@ function validateBody(body) {
     return `prismaMode harus salah satu dari: ${VALID_PRISMA_MODES.join(', ')}.`;
   }
 
+  // Opsional - dipakai buat repo private (lihat buildCloneUrl() di bawah).
+  // Cuma validasi tipe di sini; validasi "akun ini beneran ada" dilakukan
+  // belakangan di handler (butuh baca config, bukan validasi statis body).
+  if (body.githubAccountLabel !== undefined && typeof body.githubAccountLabel !== 'string') {
+    return 'githubAccountLabel harus berupa teks.';
+  }
+
   return true;
+}
+
+/**
+ * FIX: sebelumnya endpoint ini TIDAK PERNAH menyisipkan credential GitHub ke
+ * cloneUrl sama sekali - beda dengan menu CLI (mainMenu.js) yang sudah benar
+ * nanya akun tersimpan lalu build authenticated URL. Akibatnya semua deploy
+ * repo PRIVATE lewat API/app selalu gagal di step "Git Clone" dengan error
+ * "could not read Username for 'https://github.com'", walau akun GitHub-nya
+ * sudah tersimpan di Configuration.
+ *
+ * Return { ok: true, cloneUrl } atau { ok: false, message } (label dikirim
+ * tapi akunnya gak ketemu - jangan diam-diam lanjut clone tanpa auth, karena
+ * hasilnya bakal gagal lagi dengan error yang membingungkan).
+ */
+function buildCloneUrl(gitRepo, githubAccountLabel) {
+  if (!githubAccountLabel) return { ok: true, cloneUrl: gitRepo };
+  const account = config.listGithubAccounts().find((a) => a.label === githubAccountLabel);
+  if (!account) {
+    return {
+      ok: false,
+      message: `Akun GitHub berlabel "${githubAccountLabel}" tidak ditemukan di Configuration. Tambah dulu lewat menu Setting > GitHub, atau deploy tanpa memilih akun kalau repo-nya publik.`,
+    };
+  }
+  return { ok: true, cloneUrl: git.buildAuthenticatedUrl(gitRepo, account) };
 }
 
 router.post('/', (req, res) => {
@@ -65,10 +97,21 @@ router.post('/', (req, res) => {
     return res.status(400).json({ success: false, message: validation, code: 'INVALID_INPUT' });
   }
 
+  const cloneUrlResult = buildCloneUrl(req.body.gitRepo, req.body.githubAccountLabel);
+  if (!cloneUrlResult.ok) {
+    return res.status(400).json({ success: false, message: cloneUrlResult.message, code: 'GITHUB_ACCOUNT_NOT_FOUND' });
+  }
+
   const cfg = config.loadConfig();
   const params = {
     name: req.body.name,
     gitRepo: req.body.gitRepo,
+    // cloneUrl (kalau ada akun terpilih) = gitRepo + username:token disisipkan -
+    // dipakai KHUSUS buat command clone (lihat prepareAndClone() di deployNew.js).
+    // gitRepo yang bersih tetap yang disimpan ke registry & steps/log biar
+    // token gak nyangkut di tempat lain. jobStore.js sudah di-update supaya
+    // field ini ikut di-redact dari response API (sensitif, sama kayak token).
+    cloneUrl: cloneUrlResult.cloneUrl,
     branch: req.body.branch || cfg.git_branch,
     domain: req.body.domain,
     port: req.body.port,

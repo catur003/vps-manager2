@@ -54,6 +54,11 @@ const POLICY = {
   // WAJIB confirm:true di body, ini action pertama yang beneran menegakkan
   // confirmRequired di level route (lihat database.routes.js).
   'database.drop': { confirmRequired: true, auditLevel: 'write' },
+  // Set/lepas field usedByProject di dbRegistry (bukan MySQL) - cuma metadata
+  // "database ini dipakai project mana", dipakai fitur "Hapus Project" biar
+  // tau database mana yang harus ikut di-drop. Nge-link/unlink doang, gak
+  // ngubah data MySQL apapun - gak perlu confirm.
+  'database.link': { confirmRequired: false, auditLevel: 'write' },
   // Tes koneksi MySQL (root & kredensial spesifik) - read-only, gak ngubah
   // state apapun.
   'database.testConnection': { confirmRequired: false, auditLevel: 'read' },

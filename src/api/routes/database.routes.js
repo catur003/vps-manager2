@@ -332,6 +332,53 @@ router.delete('/:dbName', (req, res) => {
 });
 
 /**
+ * PATCH /database/:dbName/link - set/lepas field usedByProject di dbRegistry
+ * secara manual. Ditambah buat nutup bug: database yang dibuat lewat
+ * POST /database/ (API/app) TIDAK PERNAH ke-link ke project manapun secara
+ * otomatis (beda dari menu CLI) - efeknya toggle "Drop Database" pas Hapus
+ * Project diam-diam gak ngefek karena deleteProject.js gak nemu database
+ * "terkait" apapun. Deploy baru sudah auto-link sendiri (lihat deployNew.js),
+ * endpoint ini buat database YANG SUDAH TERLANJUR dibuat sebelum fix ini ada.
+ *
+ * Body: { projectName: string | null } - null/'' buat unlink manual.
+ */
+router.patch('/:dbName/link', (req, res) => {
+  const ACTION_LINK = 'database.link';
+  if (!commandPolicy.isExposed(ACTION_LINK)) {
+    return res.status(403).json({ success: false, message: 'Action belum diizinkan.', code: 'ACTION_NOT_ALLOWED' });
+  }
+
+  const { dbName } = req.params;
+  if (!SAFE_NAME.test(dbName)) {
+    return res.status(400).json({ success: false, message: 'Nama database tidak valid.', code: 'INVALID_INPUT' });
+  }
+
+  const { projectName } = req.body || {};
+  if (projectName !== null && projectName !== undefined && typeof projectName !== 'string') {
+    return res.status(400).json({ success: false, message: 'projectName harus teks atau null.', code: 'INVALID_INPUT' });
+  }
+
+  const entry = dbRegistry.findByName(dbName);
+  if (!entry) {
+    return res.status(404).json({ success: false, message: `Database "${dbName}" tidak ditemukan di registry.`, code: 'NOT_FOUND' });
+  }
+
+  const startedAt = Date.now();
+  const auditId = audit.recordStart({ action: ACTION_LINK, ip: req.ip, params: { dbName, projectName: projectName || null } });
+
+  const normalized = projectName && projectName.trim() ? projectName.trim() : null;
+  dbRegistry.upsertEntry({ ...entry, usedByProject: normalized });
+
+  audit.recordEnd(auditId, { success: true, message: 'OK', durationMs: Date.now() - startedAt });
+  res.json({
+    success: true,
+    message: normalized
+      ? `Database "${dbName}" ditandai dipakai oleh project "${normalized}".`
+      : `Database "${dbName}" dilepas keterkaitannya dari project manapun.`,
+  });
+});
+
+/**
  * Tes koneksi MySQL pakai kredensial root dari Configuration. Read-only,
  * gak ngubah state - cuma `SELECT 1;`.
  */
