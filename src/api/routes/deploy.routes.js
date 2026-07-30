@@ -251,6 +251,21 @@ router.post('/:jobId/retry', (req, res) => {
   // dikirim benar.
   const forcedEarliestKeys = [];
   if (overrides.envContent !== undefined) forcedEarliestKeys.push('env');
+  // FIX: kalau prismaMode diubah pas retry, key step Prisma berubah nama
+  // (mis. 'prisma_push' -> 'prisma_push_force') - tanpa dipaksa resume
+  // lebih awal, dua skenario buruk kejadian: (1) job gagal PAS di step
+  // prisma -> key lama gak ketemu di steps baru -> fallback restart dari
+  // index 0, atau (2) job gagal di step SETELAH prisma (mis. build) ->
+  // resume tetap mulai dari situ -> step prisma dengan mode BARU gak
+  // pernah dijalankan sama sekali, diam-diam, tanpa error.
+  // Dipaksa ke 'install' (BUKAN 'prisma' - itu bukan key asli, cuma nama
+  // di RESUME_STEP_ORDER buat keperluan ranking; key ASLI-nya selalu
+  // 'prisma_<mode>', jadi findIndex() di deployNew.js gak akan pernah
+  // match kalau dipaksa ke literal 'prisma'). 'install' key asli yang
+  // urutannya persis sebelum prisma di RESUME_STEP_ORDER, jadi resume
+  // dari situ otomatis nyertain step prisma yang baru tanpa perlu ulang
+  // step 'env' (kalau envContent-nya sendiri gak diubah).
+  if (overrides.prismaMode !== undefined) forcedEarliestKeys.push('install');
   if (overrides.port !== undefined) forcedEarliestKeys.push('pm2_start');
   if (overrides.domain !== undefined) forcedEarliestKeys.push('nginx');
   const effectiveResumeFromKey = forcedEarliestKeys.reduce(
