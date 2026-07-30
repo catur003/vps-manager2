@@ -205,7 +205,13 @@ router.post('/:jobId/retry', (req, res) => {
   if (!originalJob) {
     return res.status(404).json({ success: false, message: 'Job asli tidak ditemukan.', code: 'JOB_NOT_FOUND' });
   }
-  if (originalJob.type !== 'deploy_nextjs') {
+  // FIX: sebelumnya cuma job type 'deploy_nextjs' (attempt PERTAMA) yang
+  // boleh di-retry. Kalau RETRY-nya sendiri gagal lagi (job hasil retry
+  // bertipe 'deploy_nextjs_retry'), job itu gak bisa di-retry lagi lewat
+  // endpoint ini - user kepentok gak bisa lanjutin/ubah .env lagi walau
+  // stoppedAtKey-nya ada. Sekarang job hasil retry pun boleh jadi basis
+  // retry berikutnya (retry rantai/berkali-kali).
+  if (originalJob.type !== 'deploy_nextjs' && originalJob.type !== 'deploy_nextjs_retry') {
     return res.status(400).json({ success: false, message: 'Job ini bukan job deploy, gak bisa di-retry.', code: 'INVALID_JOB_TYPE' });
   }
   if (originalJob.status !== 'failed') {
@@ -241,17 +247,23 @@ router.post('/:jobId/retry', (req, res) => {
     originalJob.stoppedAtKey
   );
 
+  // Kalau yang di-retry adalah job hasil retry sebelumnya (rantai retry),
+  // `rootJobId` tetap nunjuk ke job 'deploy_nextjs' PALING AWAL (bukan job
+  // retry perantara), supaya history/audit tetap bisa ditelusuri balik ke
+  // attempt original walau sudah retry berkali-kali.
+  const rootJobId = originalJob.params.originalJobId || originalJob.id;
+
   const startedAt = Date.now();
   const auditId = audit.recordStart({
     action: RETRY_ACTION,
     ip: req.ip,
-    params: { originalJobId: originalJob.id, resumeFromKey: effectiveResumeFromKey, overrides },
+    params: { originalJobId: rootJobId, resumeFromKey: effectiveResumeFromKey, overrides },
   });
   const jobId = jobStore.createJob('deploy_nextjs_retry', {
     ...originalJob.params,
     ...overrides,
     resumeFromKey: effectiveResumeFromKey,
-    originalJobId: originalJob.id,
+    originalJobId: rootJobId,
   });
 
   const child = fork(RETRY_WORKER_PATH, [jobId], { detached: true, stdio: 'ignore' });
