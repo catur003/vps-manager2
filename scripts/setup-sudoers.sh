@@ -140,6 +140,16 @@ BIN_GREP="$(resolve_bin grep)"
 # jadi rule tetap valid & langsung jalan begitu fail2ban di-`apt install`
 # belakangan (tanpa perlu jalanin ulang script ini).
 BIN_FAIL2BAN="$(resolve_bin fail2ban-client)"
+# FIXED: src/deploy/deployNew.js step "Prisma (generate/push/migrate)" manggil
+# `sudo -u ${DEPLOY_USER} npx --yes prisma ...` lewat runAsUserArgs() (execFileSync
+# langsung ke `sudo`, BUKAN lewat bash -c) - jadi sudo ngecek command "npx" apa
+# adanya, bukan "bash". Rule (${DEPLOY_USER}) di bawah sebelumnya cuma nyantumin
+# npm/node/pm2/bash - "npx" gak pernah ditambahin sama sekali. Akibatnya SETIAP
+# deploy dengan Mode Prisma diisi (generate/push/migrate) selalu gagal dengan
+# "user X is not allowed to execute '/usr/bin/npx ...'", walau npm/node/git/bash
+# semua sudah jalan normal. Diresolve dinamis (bukan hardcode /usr/bin/npx) karena
+# instalasi Node lewat nvm/aaPanel biasa naruh npx di path lain.
+BIN_NPX="$(resolve_bin npx)"
 
 if [ -n "$DEFAULT_FOLDER" ] && [ -d "$DEFAULT_FOLDER" ]; then
   ACTUAL_OWNER="$(stat -c '%U' "$DEFAULT_FOLDER")"
@@ -165,7 +175,7 @@ cat > "$TMP_FILE" <<EOF
 # Command dibatasi cuma yang benar-benar dipanggil dari src/utils/shell.js,
 # src/cleanup/cleanup.js, src/git/git.js, src/build/build.js - BUKAN blanket ALL.
 
-${API_USER} ALL=(${DEPLOY_USER}) NOPASSWD: /bin/rm, /usr/bin/find, /usr/bin/du, /bin/mkdir, /usr/bin/git, /usr/bin/npm, /usr/bin/node, /usr/bin/pm2, /bin/bash, /usr/bin/lsof, ${BIN_TRUE}
+${API_USER} ALL=(${DEPLOY_USER}) NOPASSWD: /bin/rm, /usr/bin/find, /usr/bin/du, /bin/mkdir, /usr/bin/git, /usr/bin/npm, /usr/bin/node, /usr/bin/pm2, ${BIN_NPX}, /bin/bash, /usr/bin/lsof, ${BIN_TRUE}
 
 # Root command:
 # - nginx reload/test (pakai nginx_binary asli dari config.json, BUKAN dihardcode -
