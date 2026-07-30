@@ -147,13 +147,24 @@ module.exports = router;
 // deployNew.js) - dipakai buat mikirin "kalau field X di-override pas retry,
 // step paling awal mana yang WAJIB diulang biar override itu beneran
 // kepakai (bukan cuma nyambung dari step gagal asli yang udah lewatin step
-// itu)". Step 'prisma_*' sengaja gak dimasukin (kunci berubah-ubah sesuai
-// mode) - fallback aman: kalau resumeFromKey gak ketemu di steps versi baru,
-// deployNew.js otomatis restart dari index 0.
-const RESUME_STEP_ORDER = ['env', 'install', 'build', 'pm2_start', 'pm2_save', 'nginx', 'registry'];
+// itu)".
+const RESUME_STEP_ORDER = ['env', 'install', 'prisma', 'build', 'pm2_start', 'pm2_save', 'nginx', 'registry'];
 function stepRank(key) {
+  // BUG FIX: key prisma ('prisma_generate'/'prisma_push'/'prisma_migrate',
+  // beda-beda sesuai mode) sebelumnya TIDAK dimasukin ke RESUME_STEP_ORDER
+  // sama sekali, jadi fallback "key gak dikenal" (return 0) kepakai buat
+  // prisma - PERSIS SAMA rank-nya kayak 'env' (juga 0). Efeknya FATAL:
+  // pas retry gagal lagi di step prisma, forcedEarliestKeys=['env'] gak
+  // pernah menang lawan originalJob.stoppedAtKey='prisma_push' karena
+  // reduce()-nya pakai `<` (strict less-than) - 0 < 0 = false. Akibatnya
+  // envContent yang baru diketik user gak pernah dipaksa nulis ulang step
+  // 'env' - retry langsung lanjut ke prisma dengan .env LAMA, walau user
+  // udah jelas-jelas ngedit .env sebelum retry. Sekarang prisma_* dikasih
+  // posisi asli (antara install & build, sesuai urutan run-nya beneran di
+  // buildFinishSteps()), bukan numpang di rank 0.
+  if (typeof key === 'string' && key.startsWith('prisma_')) return RESUME_STEP_ORDER.indexOf('prisma');
   const idx = RESUME_STEP_ORDER.indexOf(key);
-  return idx === -1 ? 0 : idx; // key gak dikenal -> paling awal, restart aman
+  return idx === -1 ? 0 : idx; // key BENERAN gak dikenal -> paling awal, restart aman
 }
 
 // Field yang boleh di-override pas retry - SENGAJA dibatasi cuma yang aman
