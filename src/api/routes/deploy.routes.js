@@ -12,7 +12,7 @@ const router = express.Router();
 const ACTION = 'deploy.deployNextJs';
 const WORKER_PATH = path.join(__dirname, '..', 'jobs', 'deployWorker.js');
 const RETRY_WORKER_PATH = path.join(__dirname, '..', 'jobs', 'retryWorker.js');
-const VALID_PRISMA_MODES = ['none', 'generate', 'push', 'migrate'];
+const VALID_PRISMA_MODES = ['none', 'generate', 'push', 'push_force', 'migrate'];
 
 // Field-field ini dieksekusi lewat execFileSync (bukan shell) di deployNew.js
 // jadi TIDAK BISA lagi memicu command injection walau isinya aneh. Regex di

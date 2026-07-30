@@ -35,7 +35,7 @@ function extractDbNameFromEnv(envContent) {
  * @param {number} opts.port        - port aplikasi
  * @param {string} opts.folderPath  - path folder tujuan clone
  * @param {string} opts.deployUser  - user pemilik project (mis. www)
- * @param {string} [opts.prismaMode] - 'none' | 'generate' | 'push' | 'migrate'
+ * @param {string} [opts.prismaMode] - 'none' | 'generate' | 'push' | 'push_force' | 'migrate'
  * @param {function} onStep         - callback(stepName, ok, message) dipanggil tiap step selesai
  */
 /**
@@ -149,6 +149,10 @@ function buildFinishSteps(opts) {
     const prismaArgs = {
       generate: ['--yes', 'prisma', 'generate'],
       push: ['--yes', 'prisma', 'db', 'push'],
+      // 'migrate deploy' TIDAK punya flag --accept-data-loss (itu cuma
+      // dipunyai 'db push') - migrate deploy apply migration file yang
+      // udah di-commit, jadi gak perlu forced-confirm kayak db push.
+      push_force: ['--yes', 'prisma', 'db', 'push', '--accept-data-loss'],
       migrate: ['--yes', 'prisma', 'migrate', 'deploy'],
     };
     const args = prismaArgs[prismaMode];
