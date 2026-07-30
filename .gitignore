@@ -1,19 +1,18 @@
 # Dependencies
 node_modules/
 
-# Env
+# Environment
 .env
 .env*.local
 
-# Data yang sensitif / spesifik per-server - JANGAN pernah kecommit
-# (config.json nyimpen db_root_password + github token, jobs.json/db-registry.json
-# nyimpen state runtime spesifik server ini)
+# Runtime data (server-specific, jangan di-commit)
 data/config.json
 data/jobs.json
 data/db-registry.json
-*.log
+data/registry.json
 
 # Logs
+*.log
 npm-debug.*
 yarn-debug.*
 yarn-error.*
@@ -25,6 +24,6 @@ yarn-error.*
 .vscode/
 .idea/
 
-# Backup dumps kalau kebetulan kegenerate di folder repo
+# Backup database
 *.sql
 *.sql.gz
