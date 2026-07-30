@@ -175,7 +175,14 @@ cat > "$TMP_FILE" <<EOF
 # Command dibatasi cuma yang benar-benar dipanggil dari src/utils/shell.js,
 # src/cleanup/cleanup.js, src/git/git.js, src/build/build.js - BUKAN blanket ALL.
 
-${API_USER} ALL=(${DEPLOY_USER}) NOPASSWD: /bin/rm, /usr/bin/find, /usr/bin/du, /bin/mkdir, /usr/bin/git, /usr/bin/npm, /usr/bin/node, /usr/bin/pm2, ${BIN_NPX}, /bin/bash, /usr/bin/lsof, ${BIN_TRUE}
+# FIXED: step "PM2 Start" (deployNew.js) manggil `sudo -u ${DEPLOY_USER}
+# PORT=<port> pm2 start ...` buat nyetel env var PORT ke proses PM2. Sudo
+# SECARA DEFAULT nolak siapapun nyetel env var apapun lewat command line
+# (`VAR=value command`) kecuali rule-nya dikasih tag SETENV eksplisit -
+# tanpa ini SETIAP deploy/retry yang nyampe step PM2 Start selalu gagal
+# dengan "sudo: sorry, you are not allowed to set the following environment
+# variables: PORT", walau command pm2-nya sendiri sudah ada di whitelist.
+${API_USER} ALL=(${DEPLOY_USER}) NOPASSWD:SETENV: /bin/rm, /usr/bin/find, /usr/bin/du, /bin/mkdir, /usr/bin/git, /usr/bin/npm, /usr/bin/node, /usr/bin/pm2, ${BIN_NPX}, /bin/bash, /usr/bin/lsof, ${BIN_TRUE}
 
 # Root command:
 # - nginx reload/test (pakai nginx_binary asli dari config.json, BUKAN dihardcode -

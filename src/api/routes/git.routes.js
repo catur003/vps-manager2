@@ -15,6 +15,13 @@ const router = express.Router();
 // bawah file.
 const BRANCH_REGEX = /^[a-zA-Z0-9/_.-]+$/;
 
+// FIX: manualUrl di POST /:name/credentials sebelumnya TANPA validasi
+// apapun sebelum nyampe git.setRemoteUrl() - satu-satunya penutup celah
+// waktu itu adalah runAsUserArgs() di sisi git.js. Sekarang runAsUserArgs()
+// sudah bener (execFileSync, argv terpisah), regex ini jadi lapisan KEDUA
+// (defense-in-depth) - pola sama kayak GIT_REPO_REGEX di deploy.routes.js.
+const GIT_URL_REGEX = /^(https?:\/\/|git@)[a-zA-Z0-9_.@:/-]+$/;
+
 function isValidBranch(branch) {
   if (!branch || typeof branch !== 'string') return false;
   if (!BRANCH_REGEX.test(branch)) return false;
@@ -222,6 +229,15 @@ router.post('/:name/credentials', (req, res) => {
     return res.status(400).json({
       success: false,
       message: 'Kirim salah satu: accountLabel (akun GitHub tersimpan) atau manualUrl.',
+      code: 'INVALID_INPUT',
+    });
+  }
+  // FIX: manualUrl sebelumnya lolos ke git.setRemoteUrl() tanpa validasi
+  // format apapun - lihat catatan GIT_URL_REGEX di atas.
+  if (manualUrl && (typeof manualUrl !== 'string' || !GIT_URL_REGEX.test(manualUrl))) {
+    return res.status(400).json({
+      success: false,
+      message: 'manualUrl wajib URL git yang valid (https:// atau git@).',
       code: 'INVALID_INPUT',
     });
   }

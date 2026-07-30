@@ -95,6 +95,28 @@ function isValidName(name) {
 }
 
 /**
+ * Escape value buat ditempel ke DALAM string literal SQL yang dibungkus
+ * kutip TUNGGAL (mis. `IDENTIFIED BY '${escaped}'`). Dipakai KHUSUS untuk
+ * value yang gak bisa divalidasi lewat whitelist regex kayak isValidName()
+ * (mis. password - boleh mengandung karakter apa aja). Escape backslash
+ * DULU baru kutip tunggal (urutan penting - kalau kebalik, backslash hasil
+ * escape kutip tunggal ikut ke-escape lagi jadi dobel).
+ *
+ * FIX (SQL injection): createDatabase()/resetPassword() sebelumnya nempelin
+ * password APA ADANYA ke SQL (`IDENTIFIED WITH mysql_native_password BY
+ * '${password}'`) - dikirim dari body request TANPA validasi/escape sama
+ * sekali (beda dari dbName/dbUser yang sudah dijaga isValidName()). Password
+ * berisi kutip tunggal (mis. `x' ; DROP DATABASE mysql; -- `) bisa keluar
+ * dari string literal dan nambahin statement SQL lain yang BENERAN
+ * dieksekusi oleh db_root_user (yang notabene emang perlu GRANT OPTION buat
+ * fitur ini) - dampaknya bisa sampe bikin user MySQL admin baru atau hapus
+ * database lain.
+ */
+function escapeSqlString(value) {
+  return String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+/**
  * List semua database (kecuali database sistem bawaan MySQL).
  */
 function listDatabases() {
@@ -303,11 +325,12 @@ function createDatabase(dbName, dbUser, customPassword) {
   }
 
   const password = customPassword && customPassword.trim() !== '' ? customPassword : generatePassword();
+  const escapedPassword = escapeSqlString(password);
 
   const sql = `
     CREATE DATABASE IF NOT EXISTS \`${dbName}\` CHARACTER SET utf8mb4;
-    CREATE USER IF NOT EXISTS '${dbUser}'@'127.0.0.1' IDENTIFIED WITH mysql_native_password BY '${password}';
-    CREATE USER IF NOT EXISTS '${dbUser}'@'localhost' IDENTIFIED WITH mysql_native_password BY '${password}';
+    CREATE USER IF NOT EXISTS '${dbUser}'@'127.0.0.1' IDENTIFIED WITH mysql_native_password BY '${escapedPassword}';
+    CREATE USER IF NOT EXISTS '${dbUser}'@'localhost' IDENTIFIED WITH mysql_native_password BY '${escapedPassword}';
     GRANT ALL PRIVILEGES ON \`${dbName}\`.* TO '${dbUser}'@'127.0.0.1';
     GRANT ALL PRIVILEGES ON \`${dbName}\`.* TO '${dbUser}'@'localhost';
     FLUSH PRIVILEGES;
@@ -335,10 +358,11 @@ function resetPassword(dbName, dbUser, customPassword) {
   if (!isValidName(dbUser)) return { ok: false, errorMessage: 'Nama user tidak valid.' };
 
   const password = customPassword && customPassword.trim() !== '' ? customPassword : generatePassword();
+  const escapedPassword = escapeSqlString(password);
 
   const sql = `
-    ALTER USER '${dbUser}'@'127.0.0.1' IDENTIFIED WITH mysql_native_password BY '${password}';
-    ALTER USER '${dbUser}'@'localhost' IDENTIFIED WITH mysql_native_password BY '${password}';
+    ALTER USER '${dbUser}'@'127.0.0.1' IDENTIFIED WITH mysql_native_password BY '${escapedPassword}';
+    ALTER USER '${dbUser}'@'localhost' IDENTIFIED WITH mysql_native_password BY '${escapedPassword}';
     FLUSH PRIVILEGES;
   `.replace(/\n\s*/g, ' ');
 
