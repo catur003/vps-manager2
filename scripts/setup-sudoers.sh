@@ -105,6 +105,16 @@ BIN_CP="$(resolve_bin cp)"
 BIN_LN="$(resolve_bin ln)"
 BIN_MKDIR="$(resolve_bin mkdir)"
 BIN_RM="$(resolve_bin rm)"
+# FIXED: src/ssl/ssl.js manggil `sudo openssl x509 -enddate -noout -in ...`
+# (checkCertExpiry) dan `sudo mkdir ... && sudo chmod -R 755 ...` (siapin
+# webroot ACME challenge) - dua-duanya (openssl, chmod) gak pernah masuk
+# rule (root) di bawah walau "SSL cert" udah disebut di komentarnya.
+# Akibatnya fitur SSL Manager (cek expiry cert) selalu minta password sudo
+# beneran ke API_USER, padahal command SSL lain (certbot, nginx reload)
+# udah jalan normal tanpa password - karena openssl/chmod SAMA SEKALI gak
+# match rule manapun (bukan salah user/scope, commandnya emang gak ada).
+BIN_OPENSSL="$(resolve_bin openssl)"
+BIN_CHMOD="$(resolve_bin chmod)"
 # FIXED: src/deploy/deployNew.js step "Siapkan Folder" manggil
 # `sudo chown -R deployUser:deployUser folderPath` SETELAH mkdir, tapi
 # `chown` sebelumnya gak pernah dicantumkan di rule (root) di bawah -
@@ -207,8 +217,9 @@ ${API_USER} ALL=(${DEPLOY_USER}) NOPASSWD:SETENV: /bin/rm, /usr/bin/find, /usr/b
 #
 # CATATAN: certbot TETAP tanpa argumen tetap karena src/ssl/ssl.js manggil dengan
 # domain/email yang dinamis (certonly -w ... -d <domain>, renew) - gak bisa di-scope
-# ke satu argumen tetap tanpa bikin fitur SSL rusak.
-${API_USER} ALL=(root) NOPASSWD: ${NGINX_BINARY} -t, ${NGINX_BINARY} -s reload, /bin/systemctl restart nginx, /bin/systemctl reload nginx, /usr/bin/certbot, /usr/bin/ss -tlnp, /bin/ss -tlnp, /usr/sbin/ufw status, /usr/bin/lsof, ${BIN_LS}, ${BIN_CAT}, ${BIN_CP}, ${BIN_LN}, ${BIN_MKDIR}, ${BIN_CHOWN}, ${BIN_RM}, ${BIN_TEST}, ${BIN_GREP}, ${BIN_FAIL2BAN} status, ${BIN_PM2} list
+# ke satu argumen tetap tanpa bikin fitur SSL rusak. Sama alasannya openssl gak
+# di-scope ke argumen tetap (path fullchain per-domain beda-beda).
+${API_USER} ALL=(root) NOPASSWD: ${NGINX_BINARY} -t, ${NGINX_BINARY} -s reload, /bin/systemctl restart nginx, /bin/systemctl reload nginx, /usr/bin/certbot, ${BIN_OPENSSL}, /usr/bin/ss -tlnp, /bin/ss -tlnp, /usr/sbin/ufw status, /usr/bin/lsof, ${BIN_LS}, ${BIN_CAT}, ${BIN_CP}, ${BIN_LN}, ${BIN_MKDIR}, ${BIN_CHMOD}, ${BIN_CHOWN}, ${BIN_RM}, ${BIN_TEST}, ${BIN_GREP}, ${BIN_FAIL2BAN} status, ${BIN_PM2} list
 EOF
 
 if ! visudo -c -f "$TMP_FILE" >/dev/null 2>&1; then
