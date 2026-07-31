@@ -141,6 +141,36 @@ function stash(projectPath, deployUser) {
 }
 
 /**
+ * "Paksa Sync ke Remote" - buat keluar dari state yang GAK BISA diselesaikan
+ * lewat pull() atau stash() biasa (mis. ada unmerged files/conflict dari
+ * merge yang kepotong/gagal sebelumnya - `git pull` nolak duluan dengan
+ * "Pulling is not possible because you have unmerged files", dan `git
+ * stash` JUGA nolak kalau ada unmerged files, jadi user kejebak tanpa jalan
+ * keluar). Ini nge-reset working tree PAKSA biar PERSIS sama remote branch -
+ * ngebuang SEMUA perubahan lokal (baik yang lagi conflict maupun yang belum
+ * di-commit), bukan cuma nyelesain conflict-nya doang. DESTRUKTIF by design:
+ * cocok buat konteks deploy (project seharusnya emang gak ada edit manual di
+ * server), makanya endpoint ini wajib ada konfirmasi eksplisit di sisi UI
+ * sebelum dipanggil.
+ */
+function forceSyncToRemote(projectPath, deployUser) {
+  const branchResult = shell.runAsUser(deployUser, 'git rev-parse --abbrev-ref HEAD', { cwd: projectPath, silent: true });
+  if (!branchResult.ok) return { ok: false, errorMessage: `Gagal deteksi branch aktif: ${branchResult.errorMessage}` };
+  const branch = branchResult.output.trim();
+
+  // Merge yang lagi jalan (kalau ada) wajib di-abort DULU - `git reset --hard`
+  // doang TIDAK otomatis membersihkan state MERGE_HEAD, bisa nyisain repo
+  // dalam kondisi aneh (working tree bersih tapi Git masih "mikir" lagi
+  // proses merge). Diabaikan kalau memang gak ada merge yang jalan (harmless).
+  shell.runAsUser(deployUser, 'git merge --abort', { cwd: projectPath, silent: true });
+
+  const fetchResult = shell.runAsUser(deployUser, 'git fetch --quiet', { cwd: projectPath });
+  if (!fetchResult.ok) return { ok: false, errorMessage: `Gagal fetch dari remote: ${fetchResult.errorMessage}` };
+
+  return shell.runAsUser(deployUser, `git reset --hard origin/${branch}`, { cwd: projectPath });
+}
+
+/**
  * Sisipkan username:token ke URL https GitHub, buat clone/pull repo private
  * tanpa nanya username/PAT tiap kali. Cuma disisipkan kalau URL-nya https://
  * (SSH URL / URL yang udah ada credential-nya sendiri dibiarkan apa adanya).
@@ -190,6 +220,7 @@ module.exports = {
   checkout,
   log,
   stash,
+  forceSyncToRemote,
   buildAuthenticatedUrl,
   stripCredentials,
   setRemoteUrl,

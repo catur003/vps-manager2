@@ -109,6 +109,10 @@ const POLICY = {
   // drastis kalau branch salah, tapi gampang checkout balik, gak perlu confirm.
   'git.checkout': { confirmRequired: false, auditLevel: 'write' },
   'git.stash': { confirmRequired: false, auditLevel: 'write' },
+  // Destruktif (buang perubahan lokal + reset paksa ke remote) - dipakai
+  // sebagai jalan keluar pas pull() DAN stash() sama-sama nolak karena ada
+  // unmerged files/conflict yang gak terselesaikan.
+  'git.forceSyncToRemote': { confirmRequired: true, auditLevel: 'write' },
   // Ganti remote URL origin (kredensial GitHub per-project) - gampang
   // diulang/gak ngerusak data lain kalau salah pilih akun, jadi gak perlu
   // confirm eksplisit.

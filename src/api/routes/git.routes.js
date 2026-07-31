@@ -210,6 +210,42 @@ router.post('/:name/stash', (req, res) => {
 });
 
 /**
+ * POST /:name/force-sync - jalan keluar buat kondisi yang GAK BISA
+ * diselesaikan lewat /pull atau /stash (unmerged files/conflict) - lihat
+ * catatan lengkap di git.forceSyncToRemote(). DESTRUKTIF, wajib
+ * { confirm: true } di body (lihat commandPolicy.js - confirmRequired).
+ */
+router.post('/:name/force-sync', (req, res) => {
+  const ACTION = 'git.forceSyncToRemote';
+  const policy = commandPolicy.getPolicy(ACTION);
+  if (!policy) {
+    return res.status(403).json({ success: false, message: 'Action belum diizinkan.', code: 'ACTION_NOT_ALLOWED' });
+  }
+  const project = resolveProject(req, res);
+  if (!project) return;
+
+  const { confirm } = req.body || {};
+  if (policy.confirmRequired && confirm !== true) {
+    return res.status(400).json({
+      success: false,
+      message: `Ini akan MEMBUANG semua perubahan lokal di project "${project.name}" (termasuk file yang lagi conflict) dan menyamakan paksa ke branch remote. Kirim ulang dengan { "confirm": true } di body kalau yakin.`,
+      code: 'CONFIRM_REQUIRED',
+    });
+  }
+
+  const startedAt = Date.now();
+  const auditId = audit.recordStart({ action: ACTION, ip: req.ip, params: { name: project.name } });
+
+  const result = git.forceSyncToRemote(project.path, project.deploy_user);
+  audit.recordEnd(auditId, { success: result.ok, message: result.errorMessage || 'OK', durationMs: Date.now() - startedAt });
+
+  if (!result.ok) {
+    return res.status(400).json({ success: false, message: result.errorMessage, code: 'GIT_FORCE_SYNC_FAILED' });
+  }
+  res.json({ success: true, message: 'Working tree berhasil disamakan paksa ke branch remote.', data: { output: result.output } });
+});
+
+/**
  * POST /:name/credentials - ganti remote URL repo (dipakai kalau PAT lama
  * expired/direvoke, atau mau pindah akun GitHub buat repo yang sama). Ini
  * BEDA dari /config/github (config.routes.js) yang cuma nyimpen daftar akun -
