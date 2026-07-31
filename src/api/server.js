@@ -19,6 +19,7 @@ const configRoutes = require('./routes/config.routes');
 const doctorRoutes = require('./routes/doctor.routes');
 const buildRoutes = require('./routes/build.routes');
 const systemRoutes = require('./routes/system.routes');
+const domainsRoutes = require('./routes/domains.routes');
 
 function createServer() {
   // Job yang masih "pending"/"running" dari sebelum API ini nyala (mis. API
@@ -55,6 +56,7 @@ function createServer() {
   app.use('/doctor', doctorRoutes);
   app.use('/project', buildRoutes);
   app.use('/system', systemRoutes);
+  app.use('/domains', domainsRoutes);
 
   app.use((req, res) => {
     res.status(404).json({ success: false, message: 'Endpoint tidak ditemukan.', code: 'NOT_FOUND' });

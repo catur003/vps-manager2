@@ -17,6 +17,10 @@
  */
 const POLICY = {
   'monitor.getStatus': { confirmRequired: false, auditLevel: 'read' },
+  // Gabungan status registry+nginx+ssl per domain - read-only murni, gak
+  // ngubah state apapun, dipakai buat layar "Domain" & live-check pas ngetik.
+  'domains.list': { confirmRequired: false, auditLevel: 'read' },
+  'domains.status': { confirmRequired: false, auditLevel: 'read' },
   // Deploy project BARU - bukan overwrite/hapus apapun yang sudah ada
   // (safety.preDeployCheck di dalam deployNextJs sudah nolak kalau nama/
   // port/domain bentrok sama project lain), jadi gak perlu confirm eksplisit.
