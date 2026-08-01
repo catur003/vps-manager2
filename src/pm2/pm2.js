@@ -67,6 +67,10 @@ function listApps() {
         cpu: app.monit ? `${app.monit.cpu}%` : '-',
         uptime: app.pm2_env.pm_uptime ? new Date(app.pm2_env.pm_uptime).toLocaleString() : '-',
         cwd: app.pm2_env.pm_cwd || '-',
+        // Jumlah restart sejak app ini pertama kali di-start (termasuk restart
+        // otomatis karena crash, bukan cuma yang manual). Kalau angka ini
+        // tinggi & terus naik antar refresh, itu tanda crash-loop.
+        restartCount: app.pm2_env.restart_time ?? 0,
       }));
       allApps.push(...apps);
     } catch (err) {
@@ -159,6 +163,7 @@ function listAppsIncludingUnstarted() {
       cpu: '-',
       uptime: '-',
       cwd: p.path || '-',
+      restartCount: 0,
     }));
   return { ok: ok || registryOnly.length > 0, apps: [...apps, ...registryOnly], error, warnings };
 }
