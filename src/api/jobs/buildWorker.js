@@ -50,6 +50,7 @@ try {
     const prismaFn = {
       generate: build.prismaGenerate,
       push: build.prismaDbPush,
+      push_force: build.prismaDbPushForce,
       migrate: build.prismaMigrateDeploy,
     }[steps.prismaMode];
     if (!prismaFn) return fail(`prismaMode "${steps.prismaMode}" tidak dikenali.`);

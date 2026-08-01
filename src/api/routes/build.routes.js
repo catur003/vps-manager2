@@ -11,7 +11,7 @@ const { validateName } = require('../../menu/helpers');
 const router = express.Router();
 const BUILD_WORKER_PATH = path.join(__dirname, '..', 'jobs', 'buildWorker.js');
 const SEED_WORKER_PATH = path.join(__dirname, '..', 'jobs', 'seedWorker.js');
-const VALID_PRISMA_MODES = ['none', 'generate', 'push', 'migrate'];
+const VALID_PRISMA_MODES = ['none', 'generate', 'push', 'push_force', 'migrate'];
 
 function guard(action, res) {
   if (!commandPolicy.isExposed(action)) {

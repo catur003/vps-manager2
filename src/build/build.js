@@ -36,10 +36,16 @@ function prismaGenerate(projectPath, deployUser) {
 }
 
 function prismaDbPush(projectPath, deployUser) {
-  // --accept-data-loss dihindari sengaja: kalau prisma minta konfirmasi karena
-  // ada potensi kehilangan data, biar GAGAL & kelihatan errornya, bukan
-  // ke-skip diam-diam.
+  // Aman secara default: kalau prisma nemu potensi kehilangan data, ini akan
+  // GAGAL kelihatan errornya - bukan ke-skip diam-diam. Kalau user memang mau
+  // terima resikonya, pakai prismaDbPushForce (mode 'push_force').
   return shell.runAsUser(deployUser, 'npx prisma db push', { cwd: projectPath, ...LONG_OPTS });
+}
+
+function prismaDbPushForce(projectPath, deployUser) {
+  // Sama kayak prismaMode 'push_force' di alur Deploy awal (deployNew.js) -
+  // user di mobile app harus pilih mode ini secara eksplisit, gak pernah default.
+  return shell.runAsUser(deployUser, 'npx prisma db push --accept-data-loss', { cwd: projectPath, ...LONG_OPTS });
 }
 
 function prismaMigrateDeploy(projectPath, deployUser) {
@@ -60,6 +66,7 @@ module.exports = {
   npmInstall,
   prismaGenerate,
   prismaDbPush,
+  prismaDbPushForce,
   prismaMigrateDeploy,
   prismaSeed,
   npmBuild,
