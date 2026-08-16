@@ -35,6 +35,12 @@ const POLICY = {
   'deploy.retry': { confirmRequired: false, auditLevel: 'write' },
   'jobs.get': { confirmRequired: false, auditLevel: 'read' },
   'jobs.list': { confirmRequired: false, auditLevel: 'read' },
+  // Hapus 1 job selesai/gagal - histori doang, gak ngubah state server
+  // manapun (project/nginx/database gak kesentuh), jadi gak perlu confirm.
+  'jobs.delete': { confirmRequired: false, auditLevel: 'write' },
+  // Bersihkan SEMUA job final sekaligus - masih cuma histori, tapi jumlahnya
+  // bisa banyak sekaligus jadi tetap diminta confirm biar gak kepencet gak sengaja.
+  'jobs.clear': { confirmRequired: true, auditLevel: 'write' },
   // Terbitin sertifikat SSL - dibatasi cuma buat domain yang udah terdaftar
   // di registry (lihat ssl.routes.js), jadi gak bisa disalahgunakan buat
   // domain sembarang & gak perlu confirm eksplisit.

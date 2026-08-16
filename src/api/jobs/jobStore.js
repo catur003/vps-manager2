@@ -11,6 +11,21 @@ const JOBS_PATH = path.join(__dirname, '..', '..', '..', 'data', 'jobs.json');
 const SENSITIVE_KEY_PATTERN = /password|token|secret|key|envcontent|cloneurl/i;
 const MAX_STEP_MESSAGE_LENGTH = 4000;
 
+// --- Auto-clean job history ---
+// Jobs numpuk terus tiap deploy/SSL/build - tanpa batas, jobs.json bisa
+// tumbuh gak abis-abis dan daftar Job di app jadi scroll gak berujung isinya
+// history basi. Dua aturan retensi (yang mana duluan tercapai):
+// 1. Job FINAL (bukan pending/running) yang lebih tua dari
+//    JOB_RETENTION_DAYS dibuang otomatis.
+// 2. Kalau jumlah job final masih lebih dari MAX_JOBS_KEPT, yang paling
+//    lama dibuang duluan sampai pas MAX_JOBS_KEPT - biar app gak nge-render
+//    ratusan job walau semuanya "baru" secara tanggal.
+// Job yang MASIH pending/running TIDAK PERNAH dibuang otomatis, apapun
+// umurnya - biar gak ilang track job yang somehow kepanjangan jalan.
+const JOB_RETENTION_DAYS = 14;
+const MAX_JOBS_KEPT = 50;
+const FINAL_STATUSES = new Set(['success', 'failed', 'interrupted']);
+
 /**
  * PENTING - dua fungsi beda tujuan, JANGAN dipakai ketuker:
  * - `redact()`   : dipakai HANYA saat menyiapkan data buat dikirim balik ke
@@ -92,11 +107,43 @@ function reconcileInterruptedJobs() {
       changed = true;
     }
   }
+  if (autoClean(data)) changed = true;
   if (changed) save(data);
+}
+
+/**
+ * Terapin 2 aturan retensi di atas ke `data.jobs` LANGSUNG (mutate in-place),
+ * return `true` kalau ada yang beneran kebuang (biar caller tau perlu save()
+ * atau enggak). Dipanggil dari createJob() - self-cleaning tiap ada job baru
+ * masuk, TANPA perlu cron/scheduler terpisah - dan dari reconcileInterruptedJobs()
+ * pas API start, buat jaga-jaga kalau lama gak ada job baru sama sekali.
+ */
+function autoClean(data) {
+  const before = Object.keys(data.jobs).length;
+  const cutoffMs = Date.now() - JOB_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+  let all = Object.values(data.jobs);
+  all = all.filter((j) => !(FINAL_STATUSES.has(j.status) && new Date(j.updatedAt).getTime() < cutoffMs));
+
+  const finalJobs = all
+    .filter((j) => FINAL_STATUSES.has(j.status))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  if (finalJobs.length > MAX_JOBS_KEPT) {
+    const toDrop = new Set(finalJobs.slice(MAX_JOBS_KEPT).map((j) => j.id));
+    all = all.filter((j) => !toDrop.has(j.id));
+  }
+
+  const map = {};
+  all.forEach((j) => {
+    map[j.id] = j;
+  });
+  data.jobs = map;
+  return Object.keys(map).length !== before;
 }
 
 function createJob(type, params) {
   const data = load();
+  autoClean(data); // self-maintain retensi tiap ada job baru, lihat catatan di atas
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   data.jobs[id] = {
@@ -149,12 +196,50 @@ function listJobs() {
   return Object.values(load().jobs).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }
 
+/**
+ * Hapus SATU job manual dari histori. Job yang masih pending/running
+ * SENGAJA ditolak di sini (bukan cuma di route) - dua-duanya harus konsisten
+ * nolak, biar fungsi ini aman dipanggil dari mana aja tanpa nginjek aturan
+ * "jangan hapus yang masih jalan" berulang di tiap caller.
+ */
+function deleteJob(id) {
+  const data = load();
+  const job = data.jobs[id];
+  if (!job) return { ok: false, reason: 'NOT_FOUND' };
+  if (job.status === 'pending' || job.status === 'running') {
+    return { ok: false, reason: 'STILL_RUNNING' };
+  }
+  delete data.jobs[id];
+  save(data);
+  return { ok: true };
+}
+
+/**
+ * Bersihkan SEMUA job yang statusnya udah final (success/failed/interrupted)
+ * sekaligus - dipakai tombol "Bersihkan Selesai" di app. Job yang masih
+ * pending/running gak ikut kebuang (masih ada progress buat dipantau).
+ * Return jumlah job yang kebuang.
+ */
+function clearFinishedJobs() {
+  const data = load();
+  const before = Object.keys(data.jobs).length;
+  const kept = {};
+  Object.values(data.jobs).forEach((job) => {
+    if (!FINAL_STATUSES.has(job.status)) kept[job.id] = job;
+  });
+  data.jobs = kept;
+  save(data);
+  return before - Object.keys(kept).length;
+}
+
 module.exports = {
   createJob,
   updateJob,
   appendJobStep,
   getJob,
   listJobs,
+  deleteJob,
+  clearFinishedJobs,
   reconcileInterruptedJobs,
   toPublicJob,
   JOBS_PATH,

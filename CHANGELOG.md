@@ -77,3 +77,21 @@ sebelumnya masih ada di histori chat kalau sewaktu-waktu dibutuhkan.
   renew/reissue berikutnya. Bukan masalah keamanan.
 - `node.uninstall` WAJIB `{ confirm: true }` di body - destruktif, app yang
   masih pin ke versi itu bisa gagal start ulang.
+
+## Fase 3 - Auto-clean Job History + Node Projects Endpoint (2026-08-17)
+
+### Added
+- **Auto-clean job history**: `src/api/jobs/jobStore.js` sekarang otomatis
+  buang job lama tiap ada job baru masuk (`createJob()`) + pas API start
+  (`reconcileInterruptedJobs()`). Dua aturan retensi: job final (bukan
+  pending/running) lebih tua dari 14 hari dibuang, dan kalau jumlah job final
+  masih >50 biji, yang paling lama dibuang duluan sampai pas 50. Job yang
+  masih pending/running gak pernah kebuang otomatis.
+- `deleteJob(id)` + `clearFinishedJobs()` di jobStore, plus endpoint baru:
+  `DELETE /jobs/:id` (hapus 1 job, ditolak kalau masih jalan) dan
+  `DELETE /jobs` (bersihkan semua job final sekaligus, butuh `confirm:true`).
+- `GET /node/projects` (node.routes.js) - daftar project registry + versi
+  Node yang lagi di-pin per project, buat konsumsi layar Node Manager di app
+  (sebelumnya app cuma bisa lihat daftar PM2 apps, gak ada info pin per
+  project langsung dari registry).
+- `commandPolicy.js`: action baru `jobs.delete`, `jobs.clear`.

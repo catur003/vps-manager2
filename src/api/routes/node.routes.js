@@ -25,6 +25,23 @@ function resolveUser(req) {
   return req.query.user || req.body?.user || config.loadConfig().deploy_user;
 }
 
+/**
+ * GET /node/projects - daftar project di registry + versi Node yang lagi
+ * di-pin (kalau ada). Dipisah dari GET /project (yang isinya env/delete,
+ * scope beda) biar layar Node Manager di app cukup 1 request buat tau
+ * "project mana pin ke versi apa" tanpa perlu gabung-gabung data dari
+ * endpoint lain.
+ */
+router.get('/projects', (req, res) => {
+  if (!guard('node.list', res)) return; // read-only, numpang di policy node.list yang udah ada
+  const projects = registry.listProjects().map((p) => ({
+    name: p.name,
+    deploy_user: p.deploy_user || config.loadConfig().deploy_user,
+    node_version: p.node_version || null,
+  }));
+  res.json({ success: true, message: 'OK', data: projects });
+});
+
 /** GET /node/versions?user=www - daftar versi Node terinstall + current/default. */
 router.get('/versions', (req, res) => {
   if (!guard('node.list', res)) return;
