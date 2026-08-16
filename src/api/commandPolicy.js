@@ -21,6 +21,11 @@ const POLICY = {
   // ngubah state apapun, dipakai buat layar "Domain" & live-check pas ngetik.
   'domains.list': { confirmRequired: false, auditLevel: 'read' },
   'domains.status': { confirmRequired: false, auditLevel: 'read' },
+  // Tambah/lepas alias domain (mis. "www") ke project yang sudah ada -
+  // nambah/lepas nama di registry + nginx server_name, gak menyentuh
+  // project/data lain, jadi gak perlu confirm eksplisit.
+  'domains.addAlias': { confirmRequired: false, auditLevel: 'write' },
+  'domains.removeAlias': { confirmRequired: false, auditLevel: 'write' },
   // Deploy project BARU - bukan overwrite/hapus apapun yang sudah ada
   // (safety.preDeployCheck di dalam deployNextJs sudah nolak kalau nama/
   // port/domain bentrok sama project lain), jadi gak perlu confirm eksplisit.
@@ -205,6 +210,23 @@ const POLICY = {
   // registry). DESTRUKTIF TOTAL & gak ada undo (apalagi kalau dropDatabases/
   // deleteFolder true) - WAJIB confirm:true.
   'project.delete': { confirmRequired: true, auditLevel: 'write' },
+
+  // --- Node Version Manager (nvm) ---
+  // List versi Node terinstall - read-only.
+  'node.list': { confirmRequired: false, auditLevel: 'read' },
+  // Install versi Node baru lewat nvm - nambah, gak nimpa/hapus versi lain
+  // yang sudah ada, jadi gak perlu confirm.
+  'node.install': { confirmRequired: false, auditLevel: 'write' },
+  // Ganti versi default nvm buat user tsb - gampang di-undo (ganti default
+  // lagi), gak perlu confirm.
+  'node.setDefault': { confirmRequired: false, auditLevel: 'write' },
+  // Hapus versi Node terinstall - kalau ada app PM2 yang masih pakai versi
+  // ini, appnya bisa gagal start ulang. WAJIB confirm:true.
+  'node.uninstall': { confirmRequired: true, auditLevel: 'write' },
+  // Set/lepas versi Node KHUSUS satu project (override dari default nvm) -
+  // cuma nyimpen preferensi ke registry, efeknya baru kepakai pas app
+  // di-start ulang, jadi gak perlu confirm.
+  'node.setProjectVersion': { confirmRequired: false, auditLevel: 'write' },
 };
 
 function getPolicy(action) {

@@ -38,8 +38,16 @@ function findByPort(port) {
   return listProjects().find((p) => p.port === port);
 }
 
+/**
+ * Cari project berdasarkan domain - cocok kalau `domain` adalah domain utama
+ * (apex) ATAU salah satu alias-nya (mis. "www.zenin.my.id" buat project yang
+ * domain utamanya "zenin.my.id"). Sebelumnya cuma exact-match ke field
+ * `domain`, jadi alias seperti www TIDAK PERNAH ketemu project apapun walau
+ * secara konsep jelas "punya" domain yang sama - itu sebabnya endpoint SSL
+ * nolak "www.zenin.my.id" padahal apex-nya sudah terdaftar.
+ */
 function findByDomain(domain) {
-  return listProjects().find((p) => p.domain === domain);
+  return listProjects().find((p) => p.domain === domain || (p.aliases || []).includes(domain));
 }
 
 /**
@@ -63,7 +71,10 @@ function addProject(project) {
     if (project.port && registry.projects.some((p) => p.port === project.port)) {
       throw new Error(`Port ${project.port} sudah dipakai project lain.`);
     }
-    if (project.domain && registry.projects.some((p) => p.domain === project.domain)) {
+    if (
+      project.domain &&
+      registry.projects.some((p) => p.domain === project.domain || (p.aliases || []).includes(project.domain))
+    ) {
       throw new Error(`Domain "${project.domain}" sudah terdaftar di project lain.`);
     }
 

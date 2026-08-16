@@ -261,13 +261,18 @@ function writeConfFile(filename, template) {
  * Buat site baru sebagai reverse proxy ke localhost:port (dipakai untuk app Node/PM2).
  * Selalu menyertakan location /.well-known/acme-challenge/ supaya nanti bisa
  * langsung dipakai certbot webroot tanpa perlu edit ulang config.
+ *
+ * `aliases`: domain tambahan (mis. "www.domain") yang harus dilayani vhost
+ * YANG SAMA - digabung ke satu baris `server_name`. File config tetap
+ * dinamai dari `domain` (domain utama) walau alias-nya berubah-ubah.
  */
-function createReverseProxySite({ domain, port }) {
+function createReverseProxySite({ domain, aliases = [], port }) {
   const webroot = config.loadConfig().certbot_webroot;
   const logDir = config.loadConfig().nginx_log_dir;
+  const serverNames = [domain, ...aliases].join(' ');
   const template = `server {
     listen 80;
-    server_name ${domain};
+    server_name ${serverNames};
 
     access_log ${logDir}/${domain}.access.log;
     error_log ${logDir}/${domain}.error.log;
@@ -293,8 +298,15 @@ function createReverseProxySite({ domain, port }) {
  * Upgrade site existing (HTTP-only) jadi HTTPS: port 80 redirect ke 443,
  * port 443 serve reverse proxy dengan sertifikat dari certbot.
  * Config lama di-backup dulu sebelum ditimpa (safety net).
+ *
+ * `aliases`: sama seperti createReverseProxySite() - digabung ke
+ * `server_name` supaya alias (mis. www) ikut dilayani vhost HTTPS yang sama.
+ * Sertifikat (`fullchain`/`privkey`) tetap satu file, TAPI harus sudah
+ * diterbitkan dengan SAN yang mencakup alias-alias ini (lihat
+ * ssl.issueCertificate) - kalau belum, browser tetap warning cert mismatch
+ * untuk alias walau nginx-nya sudah "menerima" request-nya.
  */
-function upgradeToSSL({ domain, port, fullchain, privkey }) {
+function upgradeToSSL({ domain, aliases = [], port, fullchain, privkey }) {
   const filename = `${domain}.conf`;
   const dir = confDir();
   const existingPath = path.join(dir, filename);
@@ -304,9 +316,10 @@ function upgradeToSSL({ domain, port, fullchain, privkey }) {
 
   const webroot = config.loadConfig().certbot_webroot;
   const logDir = config.loadConfig().nginx_log_dir;
+  const serverNames = [domain, ...aliases].join(' ');
   const template = `server {
     listen 80;
-    server_name ${domain};
+    server_name ${serverNames};
 
     location /.well-known/acme-challenge/ {
         root ${webroot};
@@ -319,7 +332,7 @@ function upgradeToSSL({ domain, port, fullchain, privkey }) {
 
 server {
     listen 443 ssl http2;
-    server_name ${domain};
+    server_name ${serverNames};
 
     access_log ${logDir}/${domain}.access.log;
     error_log ${logDir}/${domain}.error.log;

@@ -31,10 +31,18 @@ function ensureWebroot() {
 /**
  * Terbitin sertifikat baru pakai certbot metode webroot (independen dari config
  * nginx yang kompleks, jadi tetap jalan walau aaPanel nanti dicabut).
- * PENTING: domain harus sudah bisa diakses via HTTP (port 80) dan folder webroot
- * harus sudah di-mount di config nginx site tersebut (location /.well-known/acme-challenge/).
+ * PENTING: domain (dan semua `aliases`, mis. "www.domain") harus sudah bisa
+ * diakses via HTTP (port 80) dan folder webroot harus sudah di-mount di config
+ * nginx site tersebut (location /.well-known/acme-challenge/) - lihat
+ * nginx.createReverseProxySite/upgradeToSSL yang sekarang nulis SEMUA nama
+ * (domain + aliases) ke satu baris `server_name`, jadi satu vhost yang sama
+ * nangkep request buat domain apex maupun alias-nya.
+ *
+ * `aliases`: domain tambahan yang mau ikut masuk SAN sertifikat yang SAMA
+ * (satu sertifikat multi-domain), bukan sertifikat terpisah - ini yang bikin
+ * "www.domain" bisa ikut HTTPS tanpa didaftarin sebagai project sendiri.
  */
-function issueCertificate(domain) {
+function issueCertificate(domain, aliases = []) {
   if (!shell.commandExists('certbot')) {
     return {
       ok: false,
@@ -49,7 +57,16 @@ function issueCertificate(domain) {
   const email = config.loadConfig().certbot_email;
   const emailFlag = email ? `-m ${email}` : '--register-unsafely-without-email';
 
-  const cmd = `sudo certbot certonly --webroot -w "${webroot}" -d ${domain} --non-interactive --agree-tos ${emailFlag}`;
+  const domainFlags = [domain, ...aliases].map((d) => `-d ${d}`).join(' ');
+  // --cert-name dipaksa = domain utama (BUKAN dibiarkan certbot nebak dari
+  // urutan -d) supaya folder sertifikat SELALU konsisten di
+  // /etc/letsencrypt/live/${domain} sesuai certPaths() - kalau dibiarkan
+  // default, certbot bisa bikin lineage baru bernama alias (mis.
+  // "www.domain-0001") kalau urutan/isi -d berubah antar issue & re-issue.
+  // --expand mengizinkan nambah/ganti daftar SAN ke sertifikat lineage yang
+  // sama tanpa certbot nolak/nanya interaktif (perlu untuk alur "tambah
+  // alias lalu re-issue" di domains.routes.js).
+  const cmd = `sudo certbot certonly --webroot -w "${webroot}" ${domainFlags} --cert-name ${domain} --expand --non-interactive --agree-tos ${emailFlag}`;
   const result = shell.run(cmd);
   if (!result.ok) return { ok: false, errorMessage: result.errorMessage };
 

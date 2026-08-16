@@ -27,24 +27,32 @@ router.post('/issue', (req, res) => {
     return res.status(400).json({ success: false, message: domainCheck, code: 'INVALID_INPUT' });
   }
 
-  // Domain WAJIB sudah terdaftar di registry (sudah ada project-nya) -
-  // ini bukan endpoint "issue cert buat domain sembarang". Alasan: (1)
-  // certbot butuh port project buat nginx.upgradeToSSL() sesudahnya, (2)
-  // mencegah API ini disalahgunakan buat spam request ke Let's Encrypt atas
-  // nama domain yang gak ada hubungannya sama VPS ini (bisa kena rate limit
-  // certbot dari domain yang bukan tanggung jawab kita).
+  // Domain WAJIB sudah terdaftar di registry (sebagai domain utama ATAU
+  // alias-nya - lihat registry.findByDomain) - ini bukan endpoint "issue
+  // cert buat domain sembarang". Alasan: (1) certbot butuh port project buat
+  // nginx.upgradeToSSL() sesudahnya, (2) mencegah API ini disalahgunakan
+  // buat spam request ke Let's Encrypt atas nama domain yang gak ada
+  // hubungannya sama VPS ini (bisa kena rate limit certbot dari domain yang
+  // bukan tanggung jawab kita).
   const project = registry.findByDomain(domain);
   if (!project) {
     return res.status(404).json({
       success: false,
-      message: `Domain "${domain}" belum terdaftar di registry (belum ada project yang deploy ke domain ini).`,
+      message: `Domain "${domain}" belum terdaftar di registry (belum ada project yang deploy ke domain ini, dan bukan alias dari project manapun - tambahkan dulu lewat POST /domains/:domain/aliases kalau ini domain "www" dari project yang sudah ada).`,
       code: 'DOMAIN_NOT_REGISTERED',
     });
   }
 
+  // Selalu issue buat domain UTAMA project + SEMUA alias-nya sekaligus
+  // (satu sertifikat SAN) - bukan cuma domain persis yang diketik user.
+  // Ini yang bikin issue SSL dari "zenin.my.id" ATAU "www.zenin.my.id"
+  // hasilnya sama: satu sertifikat yang cover keduanya.
+  const primaryDomain = project.domain;
+  const aliases = project.aliases || [];
+
   const startedAt = Date.now();
-  const auditId = audit.recordStart({ action: ACTION, ip: req.ip, params: { domain } });
-  const jobId = jobStore.createJob('ssl_issue', { domain, port: project.port });
+  const auditId = audit.recordStart({ action: ACTION, ip: req.ip, params: { domain: primaryDomain, aliases } });
+  const jobId = jobStore.createJob('ssl_issue', { domain: primaryDomain, aliases, port: project.port });
 
   const child = fork(WORKER_PATH, [jobId], { detached: true, stdio: 'ignore' });
   child.unref();

@@ -1,6 +1,25 @@
 const shell = require('../utils/shell');
 const config = require('../config/config');
 const registry = require('../registry/registry');
+const node = require('../node/node');
+
+/**
+ * Kalau project ini di-pin ke versi Node tertentu (`project.node_version`,
+ * diset lewat POST /node/project/:name - lihat node.routes.js), balikin
+ * prefix `PATH=".../bin:$PATH" ` buat ditempel di depan command PM2, biar
+ * baik `npm` MAUPUN `node` yang di-resolve pas start pakai versi itu (bukan
+ * cuma `--interpreter` pm2 yang cuma nunjuk binary node doang - kita start
+ * lewat `npm run start`, jadi `npm`-nya juga harus versi yang sama).
+ *
+ * Kembalikan string kosong kalau gak di-pin (pakai default nvm/system biasa)
+ * atau kalau versi itu ternyata sudah gak terinstall lagi (fail-safe: lebih
+ * baik kepakai default daripada start-nya gagal total).
+ */
+function nodePathPrefix(project) {
+  if (!project?.node_version) return '';
+  const binDir = node.resolveBinDir(project.deploy_user, project.node_version);
+  return binDir ? `PATH="${binDir}:$PATH" ` : '';
+}
 
 /**
  * Ambil daftar user unik yang perlu dicek PM2-nya.
@@ -93,10 +112,12 @@ function listApps() {
  * nggak perlu jalanin command manual lagi.
  */
 function start(name, owner) {
-  const quickResult = shell.runAsUser(owner, `pm2 start ${name}`);
+  const project = registry.findProject(name);
+  const prefix = nodePathPrefix(project);
+
+  const quickResult = shell.runAsUser(owner, `${prefix}pm2 start ${name}`);
   if (quickResult.ok) return quickResult;
 
-  const project = registry.findProject(name);
   if (!project) {
     return {
       ...quickResult,
@@ -106,7 +127,7 @@ function start(name, owner) {
 
   // --cwd eksplisit - lihat komentar di deployNew.js step 'pm2_start' soal
   // kenapa ini gak boleh diandelin dari cwd shell doang.
-  const startCmd = `PORT=${project.port} pm2 start npm --name "${name}" --cwd "${project.path}" -- run start`;
+  const startCmd = `${prefix}PORT=${project.port} pm2 start npm --name "${name}" --cwd "${project.path}" -- run start`;
   const fullStartResult = shell.runAsUser(owner, startCmd, { cwd: project.path });
   if (!fullStartResult.ok) return fullStartResult;
 

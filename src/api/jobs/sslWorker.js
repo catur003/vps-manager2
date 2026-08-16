@@ -27,21 +27,23 @@ if (!job) {
   process.exit(1);
 }
 
-const { domain, port } = job.params;
+const { domain, aliases = [], port } = job.params;
+const allNames = [domain, ...aliases].join(', ');
 
-jobStore.updateJob(jobId, { status: 'running', message: `Menerbitkan sertifikat SSL untuk "${domain}"...` });
+jobStore.updateJob(jobId, { status: 'running', message: `Menerbitkan sertifikat SSL untuk "${allNames}"...` });
 
 try {
-  const issueResult = ssl.issueCertificate(domain);
+  const issueResult = ssl.issueCertificate(domain, aliases);
   jobStore.appendJobStep(jobId, {
     step: 'Terbitkan Sertifikat',
     ok: issueResult.ok,
-    message: issueResult.ok ? 'Sertifikat berhasil diterbitkan.' : issueResult.errorMessage,
+    message: issueResult.ok ? `Sertifikat berhasil diterbitkan untuk: ${allNames}.` : issueResult.errorMessage,
   });
   if (!issueResult.ok) return fail(`Gagal terbitkan sertifikat: ${issueResult.errorMessage}`);
 
   const upgradeResult = nginx.upgradeToSSL({
     domain,
+    aliases,
     port,
     fullchain: issueResult.fullchain,
     privkey: issueResult.privkey,
@@ -53,7 +55,7 @@ try {
   });
   if (!upgradeResult.ok) return fail(`Sertifikat terbit tapi gagal upgrade nginx: ${upgradeResult.errorMessage}`);
 
-  jobStore.updateJob(jobId, { status: 'success', message: `SSL untuk "${domain}" aktif.` });
+  jobStore.updateJob(jobId, { status: 'success', message: `SSL untuk "${allNames}" aktif.` });
   process.exit(0);
 } catch (err) {
   fail(`Error tak terduga: ${err.message}`);
