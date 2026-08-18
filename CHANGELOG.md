@@ -156,3 +156,11 @@ sebelumnya masih ada di histori chat kalau sewaktu-waktu dibutuhkan.
   `nvm ls` abis uninstall) - dugaan sebelumnya ("nolak hapus versi aktif")
   gugur, `v4.9.1` (bukan default/aktif) juga gak ke-hapus, jadi errornya
   sekarang nunjukin output MENTAH `nvm uninstall` buat diagnosa lanjut.
+
+## Fix Node Uninstall "N/A" (2026-08-17)
+
+### Fixed
+- `node.js` `uninstallVersion()`: pesan asli akhirnya kebaca ("N/A: version
+  is not installed") - `nvm deactivate` yang ditambah sebelumnya (teori
+  udah kebukti salah) DICABUT, dicurigai itu yang ngerusak state resolve
+  versi nvm di command chain yang sama.

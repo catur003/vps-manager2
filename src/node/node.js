@@ -145,7 +145,14 @@ function uninstallVersion(user, version) {
     return { ok: false, errorMessage: 'Format versi tidak valid.' };
   }
 
-  const uninstallResult = shell.runAsUser(user, withNvm(`nvm deactivate >/dev/null 2>&1; nvm uninstall ${version} 2>&1`));
+  // REVISI (laporan Zen: pesan asli "N/A: version is not installed" abis
+  // dikasih diagnostik) - `nvm deactivate` yang ditambah sebelumnya (teori
+  // "nolak hapus versi aktif", UDAH KEBUKTI SALAH karena v4.9.1 juga kena
+  // padahal jelas bukan default/aktif) DICABUT - dicurigai `nvm deactivate`
+  // di command chain YANG SAMA justru ngerusak state resolve versi nvm
+  // buat `nvm uninstall` sesudahnya (makanya nvm gak nemu versinya sama
+  // sekali, dibalikin sebagai "N/A" bukan pesan "masih aktif").
+  const uninstallResult = shell.runAsUser(user, withNvm(`nvm uninstall ${version} 2>&1`));
 
   const verify = listInstalled(user);
   const stillThere = verify.ok && verify.versions.includes(version.startsWith('v') ? version : `v${version}`);
