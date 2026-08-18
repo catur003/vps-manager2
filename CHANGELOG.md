@@ -95,3 +95,18 @@ sebelumnya masih ada di histori chat kalau sewaktu-waktu dibutuhkan.
   (sebelumnya app cuma bisa lihat daftar PM2 apps, gak ada info pin per
   project langsung dari registry).
 - `commandPolicy.js`: action baru `jobs.delete`, `jobs.clear`.
+
+## Fix Node Uninstall + Landing Page (2026-08-17)
+
+### Fixed
+- `src/node/node.js` `uninstallVersion()`: "hapus versi Node gak ilang dari
+  list" - `nvm uninstall` nolak hapus versi yang lagi dianggap "aktif" di
+  sesi shell itu (versi default OTOMATIS jadi "aktif" tiap sesi bash baru,
+  yang emang selalu terjadi karena tiap command dijalanin lewat sesi baru).
+  Fix: `nvm deactivate` dulu sebelum `nvm uninstall`.
+
+### Added
+- `public/index.html` + route `GET /` (publik, tanpa API key) di
+  `src/api/server.js` - sebelumnya buka domain API langsung
+  (`https://api.zenin.my.id/`) nunjukin JSON mentah (404 handler default),
+  sekarang landing page HTML kecil (status online, endpoint health check).

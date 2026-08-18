@@ -114,11 +114,23 @@ function installVersion(user, version) {
   return shell.runAsUser(user, withNvm(`nvm install ${version}`), { timeoutMs: 180000 });
 }
 
+/**
+ * BUG FIX (laporan Zen: "hapus versi Node gak ilang dari list"): `nvm
+ * uninstall` NOLAK hapus versi yang lagi dianggap "aktif" di sesi shell itu -
+ * dan karena tiap `runAsUser()` selalu bikin sesi bash BARU, versi yang jadi
+ * DEFAULT otomatis ke-resolve sebagai "aktif" begitu shell itu start (nvm
+ * auto `use default` pas sourcing nvm.sh). Jadi coba hapus versi yang
+ * kebetulan lagi default itu SELALU gagal (`nvm: Cannot uninstall
+ * currently-active node version`), padahal user gak ngerasa lagi "pakai"
+ * versi itu di mana pun. `nvm deactivate` dulu (idiom standar buat ini)
+ * ngosongin status "aktif" buat sesi ini, baru `nvm uninstall` bisa jalan
+ * apapun statusnya sebelumnya.
+ */
 function uninstallVersion(user, version) {
   if (!isValidVersionInput(version)) {
     return { ok: false, errorMessage: 'Format versi tidak valid.' };
   }
-  return shell.runAsUser(user, withNvm(`nvm uninstall ${version}`));
+  return shell.runAsUser(user, withNvm(`nvm deactivate >/dev/null 2>&1; nvm uninstall ${version}`));
 }
 
 function setDefault(user, version) {

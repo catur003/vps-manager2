@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const logger = require('../utils/logger');
 const { apiKeyAuth } = require('./middleware/auth');
 const jobStore = require('./jobs/jobStore');
@@ -30,6 +31,14 @@ function createServer() {
 
   const app = express();
   app.use(express.json());
+
+  // Landing page publik (TANPA auth) - sebelumnya buka domain root API
+  // (mis. https://api.zenin.my.id/) nunjukin JSON mentah (404/401 handler
+  // default), gak enak dipandang & gak informatif. `public/index.html`
+  // statis, gak perlu template engine tambahan buat 1 halaman doang.
+  app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, '..', '..', 'public', 'index.html'));
+  });
 
   // Health check TANPA auth - buat uptime checker/load balancer, gak
   // ngasih info apapun soal server selain "API-nya nyala".
