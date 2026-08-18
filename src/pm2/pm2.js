@@ -24,13 +24,23 @@ function nodePathPrefix(project) {
 /**
  * Ambil daftar user unik yang perlu dicek PM2-nya.
  * Diambil dari field deploy_user tiap project di registry (bukan hardcode "www"),
- * dengan fallback ke deploy_user default di Configuration kalau registry masih kosong.
+ * DITAMBAH SELALU deploy_user default di Configuration - BUKAN cuma fallback
+ * pas registry kosong.
+ *
+ * BUG FIX (laporan Zen: "vps-manager-api gak masuk daftar App yang jalan"):
+ * proses PM2 vps-manager-api SENDIRI bukan "project" yang terdaftar di
+ * registry (gak pernah lewat `addProject()`) - kalau user yang jalanin dia
+ * (dari Configuration `deploy_user`) BEDA dari semua deploy_user project
+ * yang KEBETULAN udah terdaftar, sebelumnya dia gak pernah ke-cek sama
+ * sekali (fallback ke config CUMA aktif kalau registry KOSONG TOTAL,
+ * bukan union). Sekarang config.deploy_user SELALU masuk daftar yang dicek,
+ * apapun isi registry-nya.
  */
 function getRelevantUsers() {
   const projects = registry.listProjects();
-  if (projects.length === 0) return [config.loadConfig().deploy_user];
   const users = new Set(projects.map((p) => p.deploy_user).filter(Boolean));
-  return users.size > 0 ? [...users] : [config.loadConfig().deploy_user];
+  users.add(config.loadConfig().deploy_user);
+  return [...users];
 }
 
 /**

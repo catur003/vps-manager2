@@ -126,11 +126,40 @@ function installVersion(user, version) {
  * ngosongin status "aktif" buat sesi ini, baru `nvm uninstall` bisa jalan
  * apapun statusnya sebelumnya.
  */
+/**
+ * BUG FIX (laporan Zen: klik hapus, versi gak ilang dari list - termasuk
+ * versi yang JELAS bukan default/aktif kayak v4.9.1, jadi dugaan
+ * "nvm nolak hapus versi aktif" GUGUR, itu bukan akar masalahnya beneran).
+ * Sebelumnya fungsi ini cuma PERCAYA exit code `nvm uninstall` doang - kalau
+ * exit-nya 0 tapi versi-nya ternyata TETEP ada (banyak kemungkinan: symlink
+ * aneh, permission, versi itu sebenernya bukan bikinan nvm asli), app gak
+ * pernah tau, cuma keliatan "gak ngefek".
+ *
+ * Sekarang di-VERIFIKASI BENERAN: abis `nvm uninstall`, cek ulang `nvm ls`
+ * - kalau versi itu MASIH ada di daftar, dianggap GAGAL (walau exit code
+ * command sebelumnya 0), dan output MENTAH `nvm uninstall` diikutsertakan
+ * di pesan error biar kebaca APA KATA NVM SEBENERNYA, bukan nebak lagi.
+ */
 function uninstallVersion(user, version) {
   if (!isValidVersionInput(version)) {
     return { ok: false, errorMessage: 'Format versi tidak valid.' };
   }
-  return shell.runAsUser(user, withNvm(`nvm deactivate >/dev/null 2>&1; nvm uninstall ${version}`));
+
+  const uninstallResult = shell.runAsUser(user, withNvm(`nvm deactivate >/dev/null 2>&1; nvm uninstall ${version} 2>&1`));
+
+  const verify = listInstalled(user);
+  const stillThere = verify.ok && verify.versions.includes(version.startsWith('v') ? version : `v${version}`);
+
+  if (stillThere) {
+    return {
+      ok: false,
+      errorMessage:
+        `Versi ${version} MASIH ada setelah dicoba dihapus (dicek ulang lewat "nvm ls", bukan nebak dari exit code doang). ` +
+        `Output "nvm uninstall": ${uninstallResult.output || uninstallResult.errorMessage || '(kosong)'}`,
+    };
+  }
+
+  return uninstallResult;
 }
 
 function setDefault(user, version) {

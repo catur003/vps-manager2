@@ -20,6 +20,14 @@ const DEFAULT_CONFIG = {
   backup_dir: '/www/backup_manager',
   backup_retention_days: 7,
   nginx_log_dir: '/www/wwwlogs',
+  // Path file credentials Cloudflare (format INI, `dns_cloudflare_api_token
+  // = <token>`) buat certbot plugin `dns-cloudflare` - dipakai buat wildcard
+  // SSL (DNS-01 challenge, satu-satunya cara certbot bisa nerbitin cert
+  // `*.domain.com`). `null` = belum di-setup, fitur wildcard nolak jalan
+  // sampai ini keisi lewat POST /ssl/cloudflare-setup. File INI-nya SENDIRI
+  // (bukan token mentahnya) yang chmod 600 - config.json ini cuma nyimpen
+  // PATH-nya, bukan token asli, biar gak ada 2 salinan token tersebar.
+  cloudflare_credentials_path: null,
   runtime_default: {
     node: '20.9.0',
     php: '8.2',

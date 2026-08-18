@@ -27,13 +27,13 @@ if (!job) {
   process.exit(1);
 }
 
-const { domain, aliases = [], port } = job.params;
-const allNames = [domain, ...aliases].join(', ');
+const { domain, aliases = [], port, wildcard = false } = job.params;
+const allNames = wildcard ? `${domain}, *.${domain}` : [domain, ...aliases].join(', ');
 
 jobStore.updateJob(jobId, { status: 'running', message: `Menerbitkan sertifikat SSL untuk "${allNames}"...` });
 
 try {
-  const issueResult = ssl.issueCertificate(domain, aliases);
+  const issueResult = ssl.issueCertificate(domain, aliases, { wildcard });
   jobStore.appendJobStep(jobId, {
     step: 'Terbitkan Sertifikat',
     ok: issueResult.ok,
@@ -47,6 +47,7 @@ try {
     port,
     fullchain: issueResult.fullchain,
     privkey: issueResult.privkey,
+    wildcard,
   });
   jobStore.appendJobStep(jobId, {
     step: 'Upgrade Nginx ke HTTPS',

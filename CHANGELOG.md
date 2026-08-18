@@ -110,3 +110,49 @@ sebelumnya masih ada di histori chat kalau sewaktu-waktu dibutuhkan.
   `src/api/server.js` - sebelumnya buka domain API langsung
   (`https://api.zenin.my.id/`) nunjukin JSON mentah (404 handler default),
   sekarang landing page HTML kecil (status online, endpoint health check).
+
+## Fix PM2 Registry Visibility + Node Uninstall Verification (2026-08-17)
+
+### Fixed
+- `src/pm2/pm2.js` `getRelevantUsers()`: "vps-manager-api gak masuk daftar
+  App yang jalan" - user yang dicek `pm2 jlist` CUMA diambil dari project
+  yang terdaftar di registry, `vps-manager-api` sendiri bukan "project"
+  (gak pernah lewat `addProject()`). `config.deploy_user` sekarang SELALU
+  masuk daftar yang dicek (union, bukan cuma fallback pas registry kosong).
+- `src/node/node.js` `uninstallVersion()`: dugaan kemarin ("nvm nolak hapus
+  versi aktif") TERBUKTI GUGUR - versi non-default/non-aktif (`v4.9.1`) juga
+  gak ke-hapus. Sekarang di-VERIFIKASI BENERAN (re-cek `nvm ls` abis
+  uninstall, bukan percaya exit code doang) - kalau versi MASIH ada, balikin
+  `ok:false` + output MENTAH `nvm uninstall` di pesan error, biar kebaca
+  akar masalah sebenernya (bukan nebak lagi).
+
+## Wildcard SSL via Cloudflare DNS-01 (2026-08-17)
+
+### Added
+- `config.js`: field baru `cloudflare_credentials_path` (default `null`,
+  SENGAJA gak masuk `EDITABLE_FIELDS` - cuma bisa diisi lewat endpoint
+  khusus, bukan `PUT /config` bebas).
+- `ssl.js`: `issueCertificate(domain, aliases, { wildcard })` - kalau
+  `wildcard: true`, JALUR TOTAL BEDA dari sebelumnya: certbot pakai plugin
+  `--dns-cloudflare` (DNS-01 challenge, satu-satunya cara ACME bisa
+  nerbitin `*.domain` - webroot/HTTP-01 gak bisa sama sekali, batasan
+  protokol). `aliases` diabaikan kalau wildcard true (`*.domain` udah nyakup
+  semuanya). Fungsi baru `setupCloudflareCredentials(apiToken)` - install
+  plugin `python3-certbot-dns-cloudflare` + tulis
+  `/etc/letsencrypt/cloudflare.ini` (chmod 600, setara ketat config.json).
+- `nginx.js` `upgradeToSSL()`: parameter baru `wildcard` - nambahin
+  `*.domain` ke `server_name` biar nginx BENERAN ngelayanin semua subdomain
+  yang udah dicover sertifikatnya.
+- Endpoint baru: `POST /ssl/cloudflare-setup { apiToken }` (setup sekali per
+  server), `GET /ssl/cloudflare-status` (cek udah di-setup apa belum), dan
+  `POST /ssl/issue` sekarang terima `wildcard: boolean` di body.
+- `commandPolicy.js`: action baru `ssl.cloudflareSetup`.
+
+### Fixed
+- `pm2.js` `getRelevantUsers()`: "vps-manager-api gak masuk daftar App yang
+  jalan" - `config.deploy_user` sekarang SELALU masuk daftar user yang
+  dicek `pm2 jlist`, bukan cuma fallback pas registry kosong.
+- `node.js` `uninstallVersion()`: sekarang di-VERIFIKASI BENERAN (re-cek
+  `nvm ls` abis uninstall) - dugaan sebelumnya ("nolak hapus versi aktif")
+  gugur, `v4.9.1` (bukan default/aktif) juga gak ke-hapus, jadi errornya
+  sekarang nunjukin output MENTAH `nvm uninstall` buat diagnosa lanjut.

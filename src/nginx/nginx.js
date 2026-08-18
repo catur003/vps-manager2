@@ -305,8 +305,15 @@ function createReverseProxySite({ domain, aliases = [], port }) {
  * diterbitkan dengan SAN yang mencakup alias-alias ini (lihat
  * ssl.issueCertificate) - kalau belum, browser tetap warning cert mismatch
  * untuk alias walau nginx-nya sudah "menerima" request-nya.
+ *
+ * `wildcard`: kalau `true`, `*.domain` DITAMBAHIN ke `server_name` (di ATAS
+ * `aliases` yang udah ada, dua-duanya bisa bareng - walau kalau wildcard
+ * aktif, alias satu-satu jadi kurang perlu lagi karena udah kecover
+ * `*.domain`). Nginx WAJIB tau soal wildcard ini juga - certbot nerbitin
+ * sertifikatnya, tapi nginx yang nentuin request ke subdomain mana aja yang
+ * BENERAN dilayani vhost ini.
  */
-function upgradeToSSL({ domain, aliases = [], port, fullchain, privkey }) {
+function upgradeToSSL({ domain, aliases = [], port, fullchain, privkey, wildcard = false }) {
   const filename = `${domain}.conf`;
   const dir = confDir();
   const existingPath = path.join(dir, filename);
@@ -316,7 +323,7 @@ function upgradeToSSL({ domain, aliases = [], port, fullchain, privkey }) {
 
   const webroot = config.loadConfig().certbot_webroot;
   const logDir = config.loadConfig().nginx_log_dir;
-  const serverNames = [domain, ...aliases].join(' ');
+  const serverNames = [domain, ...(wildcard ? [`*.${domain}`] : []), ...aliases].join(' ');
   const template = `server {
     listen 80;
     server_name ${serverNames};

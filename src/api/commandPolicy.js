@@ -45,6 +45,10 @@ const POLICY = {
   // di registry (lihat ssl.routes.js), jadi gak bisa disalahgunakan buat
   // domain sembarang & gak perlu confirm eksplisit.
   'ssl.issue': { confirmRequired: false, auditLevel: 'write' },
+  // Nyimpen API token Cloudflare (secret) - gak butuh confirm eksplisit
+  // (bukan aksi destruktif, cuma nulis 1 file credentials), tapi audit
+  // level write biar tercatat kapan token di-setup/diganti.
+  'ssl.cloudflareSetup': { confirmRequired: false, auditLevel: 'write' },
   // Cek sisa masa berlaku sertifikat - read-only.
   'ssl.checkExpiry': { confirmRequired: false, auditLevel: 'read' },
   // certbot renew otomatis skip yang belum waktunya - aman tanpa confirm.
