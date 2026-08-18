@@ -164,3 +164,18 @@ sebelumnya masih ada di histori chat kalau sewaktu-waktu dibutuhkan.
   is not installed") - `nvm deactivate` yang ditambah sebelumnya (teori
   udah kebukti salah) DICABUT, dicurigai itu yang ngerusak state resolve
   versi nvm di command chain yang sama.
+
+## Fix Total: Node Manager Nampilin Versi Hantu (2026-08-17)
+
+### Fixed
+- `node.js` `listInstalled()`: rombak total, akar masalah beneran ketemu
+  (dikonfirmasi manual lewat `ls -la ~/.nvm/versions/node/` di VPS - folder
+  KOSONG, sementara `nvm ls` nampilin 11 baris versi). Parsing lama cuma
+  regex angka versi dari teks `nvm ls`, TANPA cek marker `(-> N/A)` yang
+  nvm SENDIRI pakai buat nandain "alias ini nunjuk ke versi yang GAK
+  BENERAN keinstall" - semua alias LTS bawaan (`lts/argon`, `lts/boron`,
+  dst, SELALU ADA di nvm siapapun) ke-parse sebagai "terinstall" padahal
+  cuma file kecil 7-12 byte di `~/.nvm/alias/lts/`, bukan folder instalasi.
+  Sekarang `versions` GROUND TRUTH dari `ls $NVM_DIR/versions/node/`
+  langsung (satu-satunya sumber yang gak bisa "bohong"), `nvm ls` cuma
+  dipakai cari default/current dan di-cross-check ke ground truth itu.

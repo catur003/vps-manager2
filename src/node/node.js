@@ -56,37 +56,56 @@ function installNvm(user) {
  * "        v18.20.4", "default -> v20.11.0 (-> v20.11.0)") - diparse per baris,
  * cuma ambil token yang match pola versi (vX.Y.Z).
  */
-function parseNvmLs(output) {
-  const versions = [];
-  let currentVersion = null;
-  let defaultVersion = null;
-
-  output.split('\n').forEach((rawLine) => {
-    const line = rawLine.trim();
-    const match = line.match(/v\d+\.\d+\.\d+/);
-    if (!match) return;
-    const v = match[0];
-
-    if (line.startsWith('default')) {
-      defaultVersion = v;
-      return; // baris alias "default", bukan entri versi terinstall
-    }
-    if (!versions.includes(v)) versions.push(v);
-    if (line.startsWith('->')) currentVersion = v;
-  });
-
-  return { versions, currentVersion, defaultVersion };
-}
-
+/**
+ * FIX TOTAL (2026-08-17, ketauan bareng Zen lewat cek manual `ls -la` di
+ * VPS): parsing SEBELUMNYA cuma nangkep pola `vX.Y.Z` dari OUTPUT TEKS
+ * `nvm ls`, TANPA cek apakah baris itu punya marker `(-> N/A)` - yang
+ * artinya nvm SENDIRI udah bilang "alias ini nunjuk ke versi yang GAK
+ * BENERAN keinstall". Semua alias LTS bawaan nvm (`lts/argon`,
+ * `lts/boron`, dst - INI SELALU ADA di nvm siapapun, hardcoded, gak
+ * peduli beneran install apa nggak) ikut ke-parse sebagai "versi
+ * terinstall" gara-gara ini. Konfirmasi manual: `ls -la
+ * ~/.nvm/versions/node/` di VPS Zen KOSONG TOTAL, sementara `nvm ls`
+ * nampilin 11 baris versi - SEMUA-nya alias kosong.
+ *
+ * Fix: `versions` sekarang GROUND TRUTH langsung dari isi folder
+ * `$NVM_DIR/versions/node/` (`ls` biasa, satu-satunya sumber yang gak bisa
+ * bohong soal "beneran ada folder instalasinya apa nggak"), BUKAN dari
+ * regex ke teks `nvm ls`. `nvm ls` TETAP dipakai buat cari tau
+ * default/current, TAPI hasilnya di-cross-check ke daftar ground-truth itu
+ * dulu - default/current yang nunjuk ke versi HANTU (gak ada di ground
+ * truth) dianggap gak valid, bukan dipaksa ditampilin.
+ */
 function listInstalled(user) {
   if (!isNvmInstalled(user)) {
     return { ok: false, errorMessage: `nvm belum terinstall untuk user "${user}".`, versions: [], nvmInstalled: false };
   }
-  const result = shell.runAsUser(user, withNvm('nvm ls --no-colors'), { silent: true });
-  if (!result.ok) return { ok: false, errorMessage: result.errorMessage, versions: [], nvmInstalled: true };
 
-  const parsed = parseNvmLs(result.output);
-  return { ok: true, nvmInstalled: true, ...parsed };
+  const dirResult = shell.runAsUser(user, withNvm('ls "$NVM_DIR/versions/node" 2>/dev/null'), { silent: true });
+  if (!dirResult.ok) return { ok: false, errorMessage: dirResult.errorMessage, versions: [], nvmInstalled: true };
+
+  const versions = dirResult.output
+    .split('\n')
+    .map((s) => s.trim())
+    .filter((s) => /^v\d+\.\d+\.\d+$/.test(s));
+
+  let defaultVersion = null;
+  let currentVersion = null;
+  const lsResult = shell.runAsUser(user, withNvm('nvm ls --no-colors'), { silent: true });
+  if (lsResult.ok) {
+    lsResult.output.split('\n').forEach((rawLine) => {
+      const line = rawLine.trim();
+      if (line.includes('N/A')) return; // alias TANPA folder instalasi beneran - skip total
+      const match = line.match(/v\d+\.\d+\.\d+/);
+      if (!match) return;
+      const v = match[0];
+      if (!versions.includes(v)) return; // jaga-jaga tambahan - cuma percaya versi yang KEBUKTI ada foldernya
+      if (line.startsWith('->')) currentVersion = v;
+      if (line.startsWith('default')) defaultVersion = v;
+    });
+  }
+
+  return { ok: true, nvmInstalled: true, versions, defaultVersion, currentVersion };
 }
 
 /**
