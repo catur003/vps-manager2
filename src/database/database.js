@@ -337,10 +337,27 @@ function createDatabase(dbName, dbUser, customPassword) {
   const password = customPassword && customPassword.trim() !== '' ? customPassword : generatePassword();
   const escapedPassword = escapeSqlString(password);
 
+  // FIXED (kebukti lewat laporan Zen - percobaan yang menyingkirkan
+  // kemungkinan escaping/keyboard/karakter tersembunyi satu-satu, sampai ke
+  // curl mentah dari SSH tanpa app sama sekali): SQL sebelumnya pakai
+  // `IDENTIFIED WITH mysql_native_password BY '...'` - syntax KHUSUS
+  // MySQL 8.0. MariaDB (yang beneran jalan di server yang dilaporin, dan
+  // kemungkinan besar di banyak server lain juga - repo `mysql-server` di
+  // Ubuntu sering resolve ke MariaDB) TIDAK mendukung kombinasi klausa
+  // `WITH <plugin> BY <plaintext>` ini - parsernya expect `VIA <plugin>
+  // USING <string>` atau plain `IDENTIFIED BY <plaintext>`. Errornya
+  // "syntax error near 'BY ...'" - gampang disalahartikan sebagai masalah
+  // escaping password (apalagi kalau kebetulan passwordnya ada karakter
+  // aneh di percobaan sebelumnya), padahal DENGAN password sebersih apapun
+  // tetap gagal karena parsernya nolak duluan sebelum sempat baca value-nya.
+  // Plain `IDENTIFIED BY` didukung UNIVERSAL di MySQL maupun MariaDB versi
+  // manapun - dan ini SUDAH terbukti jalan di server yang sama lewat
+  // `ALTER USER 'root'@'localhost' IDENTIFIED BY '...'` (tanpa klausa WITH)
+  // yang dipakai pas setup password root awal.
   const sql = `
     CREATE DATABASE IF NOT EXISTS \`${dbName}\` CHARACTER SET utf8mb4;
-    CREATE USER IF NOT EXISTS '${dbUser}'@'127.0.0.1' IDENTIFIED WITH mysql_native_password BY '${escapedPassword}';
-    CREATE USER IF NOT EXISTS '${dbUser}'@'localhost' IDENTIFIED WITH mysql_native_password BY '${escapedPassword}';
+    CREATE USER IF NOT EXISTS '${dbUser}'@'127.0.0.1' IDENTIFIED BY '${escapedPassword}';
+    CREATE USER IF NOT EXISTS '${dbUser}'@'localhost' IDENTIFIED BY '${escapedPassword}';
     GRANT ALL PRIVILEGES ON \`${dbName}\`.* TO '${dbUser}'@'127.0.0.1';
     GRANT ALL PRIVILEGES ON \`${dbName}\`.* TO '${dbUser}'@'localhost';
     FLUSH PRIVILEGES;
@@ -371,8 +388,8 @@ function resetPassword(dbName, dbUser, customPassword) {
   const escapedPassword = escapeSqlString(password);
 
   const sql = `
-    ALTER USER '${dbUser}'@'127.0.0.1' IDENTIFIED WITH mysql_native_password BY '${escapedPassword}';
-    ALTER USER '${dbUser}'@'localhost' IDENTIFIED WITH mysql_native_password BY '${escapedPassword}';
+    ALTER USER '${dbUser}'@'127.0.0.1' IDENTIFIED BY '${escapedPassword}';
+    ALTER USER '${dbUser}'@'localhost' IDENTIFIED BY '${escapedPassword}';
     FLUSH PRIVILEGES;
   `.replace(/\n\s*/g, ' ');
 

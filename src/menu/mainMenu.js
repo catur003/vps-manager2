@@ -1686,11 +1686,15 @@ async function databaseManagerMenu() {
     const mysqlSocket = socketResult.output.trim();
 
     const escapedPw = password.replace(/'/g, "''");
+    // FIXED: sama root cause kayak createDatabase()/resetPassword() di
+    // database.js - `IDENTIFIED WITH mysql_native_password BY` itu syntax
+    // khusus MySQL 8.0, MariaDB nolak dengan syntax error. Ganti ke plain
+    // `IDENTIFIED BY` yang didukung universal.
     const sql = `
-      CREATE USER IF NOT EXISTS '${dbUser}'@'127.0.0.1' IDENTIFIED WITH mysql_native_password BY '${escapedPw}';
-      CREATE USER IF NOT EXISTS '${dbUser}'@'localhost' IDENTIFIED WITH mysql_native_password BY '${escapedPw}';
-      ALTER USER '${dbUser}'@'127.0.0.1' IDENTIFIED WITH mysql_native_password BY '${escapedPw}';
-      ALTER USER '${dbUser}'@'localhost' IDENTIFIED WITH mysql_native_password BY '${escapedPw}';
+      CREATE USER IF NOT EXISTS '${dbUser}'@'127.0.0.1' IDENTIFIED BY '${escapedPw}';
+      CREATE USER IF NOT EXISTS '${dbUser}'@'localhost' IDENTIFIED BY '${escapedPw}';
+      ALTER USER '${dbUser}'@'127.0.0.1' IDENTIFIED BY '${escapedPw}';
+      ALTER USER '${dbUser}'@'localhost' IDENTIFIED BY '${escapedPw}';
       GRANT ALL PRIVILEGES ON *.* TO '${dbUser}'@'127.0.0.1' WITH GRANT OPTION;
       GRANT ALL PRIVILEGES ON *.* TO '${dbUser}'@'localhost' WITH GRANT OPTION;
       FLUSH PRIVILEGES;

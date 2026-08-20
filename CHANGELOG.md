@@ -28,11 +28,24 @@ sebelumnya masih ada di histori chat kalau sewaktu-waktu dibutuhkan.
 
 - **`src/database/database.js`** `escapeSqlString()`: ganti dari
   backslash-escape (`'` -> `\'`) ke dobel-kutip (`'` -> `''`, standar ANSI
-  SQL, berlaku SELALU apapun sql_mode server-nya). Kebukti dari laporan
-  Zen: password mengandung tanda kutip bikin "ERROR 1064 - syntax error"
-  dan proses SQL berhenti di tengah (database ke-buat tapi user & grant-nya
-  gak pernah jalan). Sekalian export `runSQL` dan `escapeSqlString`
-  (dibutuhin fitur baru di bawah).
+  SQL, berlaku SELALU apapun sql_mode server-nya). Sekalian export `runSQL`
+  dan `escapeSqlString` (dibutuhin fitur baru di bawah).
+
+- **ROOT CAUSE SEBENARNYA "Buat Database" gagal syntax error** (`src/database/database.js`
+  `createDatabase()`/`resetPassword()`, `src/menu/mainMenu.js` menu
+  setup-admin): BUKAN soal escaping password (itu di atas cuma hardening
+  tambahan, bukan penyebab error yang dilaporin). SQL sebelumnya pakai
+  `IDENTIFIED WITH mysql_native_password BY '...'` - syntax KHUSUS MySQL
+  8.0. Server yang dilaporin (dan kemungkinan besar banyak server Ubuntu
+  lain - `apt install mysql-server` sering resolve ke MariaDB) jalanin
+  MariaDB, yang TIDAK mendukung kombinasi klausa `WITH <plugin> BY
+  <plaintext>` - errornya "syntax error near 'BY ...'", gampang
+  disalahartikan sebagai masalah escaping karena posisi errornya deket
+  sama value password. Dibuktikan lewat curl mentah dari SSH (password
+  tanpa karakter aneh sama sekali, tetap error sama). Ganti ke plain
+  `IDENTIFIED BY '...'` - didukung universal MySQL maupun MariaDB versi
+  manapun, dan sudah terbukti jalan di server yang sama lewat command
+  `ALTER USER ROOT` manual sebelumnya.
 
 - **`src/utils/shell.js`** `run()` dan `runArgs()`: default `cwd` diganti
   dari `process.cwd()` ke `/tmp`. Root cause "spawnSync mysql EACCES":
