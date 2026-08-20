@@ -160,6 +160,26 @@ BIN_FAIL2BAN="$(resolve_bin fail2ban-client)"
 # semua sudah jalan normal. Diresolve dinamis (bukan hardcode /usr/bin/npx) karena
 # instalasi Node lewat nvm/aaPanel biasa naruh npx di path lain.
 BIN_NPX="$(resolve_bin npx)"
+# Wildcard SSL (ssl.js setupCloudflareCredentials) manggil `sudo apt-get
+# install -y python3-certbot-dns-cloudflare` dan `sudo tee /etc/letsencrypt/
+# cloudflare.ini` - dua-duanya TIDAK PERNAH ada di rule sebelumnya, bikin
+# fitur Wildcard SSL selalu gagal "a terminal is required to read the
+# password" walau certbot/openssl/dll semua udah jalan normal.
+BIN_APT_GET="$(resolve_bin apt-get)"
+BIN_TEE="$(resolve_bin tee)"
+# Log Viewer (logviewer.js) manggil `sudo tail -n <lines> <logPath>` dengan
+# path dinamis per-domain - gak bisa di-scope ke satu path tetap (sama
+# alasannya certbot/openssl gak di-scope), jadi dibiarin bare kayak pola yang
+# sama.
+BIN_TAIL="$(resolve_bin tail)"
+# FIXED: firewall check (security.js checkFirewall(), dipakai ulang sama
+# doctor.js) sekarang fallback ufw -> firewalld -> iptables mentah, BUKAN
+# ufw doang - server yang gak pakai ufw sama sekali (Oracle Cloud default,
+# banyak provider lain yang defaultnya iptables/firewalld) sebelumnya SELALU
+# dilaporin gagal walau firewall-nya sendiri sehat. Command firewalld/
+# iptables-nya butuh di-whitelist juga di sini, sama kayak "ufw status".
+BIN_FIREWALL_CMD="$(resolve_bin firewall-cmd)"
+BIN_IPTABLES="$(resolve_bin iptables)"
 
 if [ -n "$DEFAULT_FOLDER" ] && [ -d "$DEFAULT_FOLDER" ]; then
   ACTUAL_OWNER="$(stat -c '%U' "$DEFAULT_FOLDER")"
@@ -219,7 +239,7 @@ ${API_USER} ALL=(${DEPLOY_USER}) NOPASSWD:SETENV: /bin/rm, /usr/bin/find, /usr/b
 # domain/email yang dinamis (certonly -w ... -d <domain>, renew) - gak bisa di-scope
 # ke satu argumen tetap tanpa bikin fitur SSL rusak. Sama alasannya openssl gak
 # di-scope ke argumen tetap (path fullchain per-domain beda-beda).
-${API_USER} ALL=(root) NOPASSWD: ${NGINX_BINARY} -t, ${NGINX_BINARY} -s reload, /bin/systemctl restart nginx, /bin/systemctl reload nginx, /usr/bin/certbot, ${BIN_OPENSSL}, /usr/bin/ss -tlnp, /bin/ss -tlnp, /usr/sbin/ufw status, /usr/bin/lsof, ${BIN_LS}, ${BIN_CAT}, ${BIN_CP}, ${BIN_LN}, ${BIN_MKDIR}, ${BIN_CHMOD}, ${BIN_CHOWN}, ${BIN_RM}, ${BIN_TEST}, ${BIN_GREP}, ${BIN_FAIL2BAN} status, ${BIN_PM2} list
+${API_USER} ALL=(root) NOPASSWD: ${NGINX_BINARY} -t, ${NGINX_BINARY} -s reload, /bin/systemctl restart nginx, /bin/systemctl reload nginx, /usr/bin/certbot, ${BIN_OPENSSL}, /usr/bin/ss -tlnp, /bin/ss -tlnp, /usr/sbin/ufw status, ${BIN_FIREWALL_CMD} --state, ${BIN_IPTABLES} -L INPUT -n, /usr/bin/lsof, ${BIN_LS}, ${BIN_CAT}, ${BIN_CP}, ${BIN_LN}, ${BIN_MKDIR}, ${BIN_CHMOD}, ${BIN_CHOWN}, ${BIN_RM}, ${BIN_TEST}, ${BIN_GREP}, ${BIN_FAIL2BAN} status, ${BIN_PM2} list, ${BIN_APT_GET} install -y python3-certbot-dns-cloudflare, ${BIN_TEE} /etc/letsencrypt/cloudflare.ini, ${BIN_TAIL}
 EOF
 
 if ! visudo -c -f "$TMP_FILE" >/dev/null 2>&1; then

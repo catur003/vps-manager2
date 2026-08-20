@@ -3,6 +3,7 @@ const fs = require('fs');
 const { spawnSync } = require('child_process');
 const shell = require('../utils/shell');
 const config = require('../config/config');
+const security = require('../security/security');
 
 /**
  * Cek non-interaktif apakah proses ini (user yang jalanin vps-api) bisa
@@ -54,10 +55,6 @@ function checkSudoCommands() {
       command: ['pm2', 'list'],
     },
     {
-      name: 'firewall',
-      command: ['ufw', 'status'],
-    },
-    {
       // FIXED: sebelumnya hardcode 'nginx' - kalau nginx_binary di config.json
       // custom (mis. aaPanel "/www/server/nginx/sbin/nginx"), sudoers bisa
       // sudah izinkan binary yang salah (atau sebaliknya) dan doctor tetap
@@ -75,7 +72,7 @@ function checkSudoCommands() {
     checks.push({ name: 'nginx-list-sites', command: ['ls', nginxConfDir] });
   }
 
-  return checks.map((item) => {
+  const results = checks.map((item) => {
     const result = spawnSync(
       'sudo',
       ['-n', ...item.command],
@@ -95,6 +92,20 @@ function checkSudoCommands() {
             `Command gagal dengan exit code ${result.status}`,
     };
   });
+
+  // FIXED: sebelumnya cek 'firewall' cuma `sudo -n ufw status` mentah -
+  // server tanpa ufw (Oracle Cloud, dll) selalu dilaporin merah walau
+  // iptables/firewalld-nya sehat. Sekarang pakai security.checkFirewall()
+  // yang udah ada fallback ufw -> firewalld -> iptables, biar konsisten
+  // sama Security Manager (menu 12) dan gak duplikat logic dua tempat beda.
+  const firewallCheck = security.checkFirewall();
+  results.push({
+    name: 'firewall',
+    ok: firewallCheck.ok,
+    reason: firewallCheck.ok ? null : firewallCheck.errorMessage,
+  });
+
+  return results;
 }
 
 
@@ -151,13 +162,18 @@ function checkPermissions() {
   const folderCheck = checkDeployFolder(cfg.default_folder);
   const sudoCommands = checkSudoCommands();
 
+  // FIXED: 'ufw' dihapus dari daftar wajib - server yang gak pakai ufw sama
+  // sekali (Oracle Cloud default, banyak provider lain yang pakai
+  // firewalld/iptables mentah) sebelumnya SELALU dilaporin
+  // "Command ufw tidak ditemukan" walau firewall-nya sendiri sehat pakai
+  // tool lain. Status firewall yang sebenarnya udah dicek generic lewat
+  // security.checkFirewall() di checkSudoCommands() di atas.
   const requiredCommands = [
     'git',
     'nginx',
     'certbot',
     'pm2',
     'ss',
-    'ufw',
   ];
 
   const commands = requiredCommands.map((cmd) => ({

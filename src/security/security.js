@@ -15,7 +15,16 @@ function checkFirewall() {
   if (firewalldResult.ok) {
     return { ok: true, tool: 'firewalld', output: firewalldResult.output };
   }
-  return { ok: false, errorMessage: 'Tidak terdeteksi ufw atau firewalld terinstall/aktif.' };
+  // FIXED: server yang gak pakai ufw/firewalld sama sekali (Oracle Cloud
+  // default, banyak provider lain yang defaultnya iptables mentah tanpa
+  // manager) sebelumnya SELALU dilaporin "gagal", padahal firewall-nya
+  // sendiri sehat - cuma beda tool. iptables -L INPUT dipilih (bukan -S)
+  // karena lebih portable antar versi iptables-legacy/nft.
+  const iptablesResult = shell.runArgs('sudo', ['iptables', '-L', 'INPUT', '-n'], { silent: true });
+  if (iptablesResult.ok && iptablesResult.output) {
+    return { ok: true, tool: 'iptables', output: iptablesResult.output };
+  }
+  return { ok: false, errorMessage: 'Tidak terdeteksi ufw, firewalld, atau iptables terinstall/aktif.' };
 }
 
 /**
