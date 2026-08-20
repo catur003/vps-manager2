@@ -98,9 +98,7 @@ function isValidName(name) {
  * Escape value buat ditempel ke DALAM string literal SQL yang dibungkus
  * kutip TUNGGAL (mis. `IDENTIFIED BY '${escaped}'`). Dipakai KHUSUS untuk
  * value yang gak bisa divalidasi lewat whitelist regex kayak isValidName()
- * (mis. password - boleh mengandung karakter apa aja). Escape backslash
- * DULU baru kutip tunggal (urutan penting - kalau kebalik, backslash hasil
- * escape kutip tunggal ikut ke-escape lagi jadi dobel).
+ * (mis. password - boleh mengandung karakter apa aja).
  *
  * FIX (SQL injection): createDatabase()/resetPassword() sebelumnya nempelin
  * password APA ADANYA ke SQL (`IDENTIFIED WITH mysql_native_password BY
@@ -111,9 +109,21 @@ function isValidName(name) {
  * dieksekusi oleh db_root_user (yang notabene emang perlu GRANT OPTION buat
  * fitur ini) - dampaknya bisa sampe bikin user MySQL admin baru atau hapus
  * database lain.
+ *
+ * FIXED (kebukti lewat laporan Zen): versi sebelumnya escape pakai backslash
+ * (`'` -> `\'`), yang HANYA valid kalau sql_mode server TIDAK include
+ * NO_BACKSLASH_ESCAPES. Walau di server yang dilaporin ternyata sql_mode-nya
+ * gak include itu (jadi bukan penyebab kasus SPESIFIK itu), backslash-escape
+ * tetap fundamentally rapuh - bisa beda-beda tergantung sql_mode server
+ * (custom my.cnf, provider managed-DB, dll), dan MySQL/MariaDB DEFAULT-nya
+ * beda-beda soal ini antar versi. Dobel-kutip (`'` -> `''`) adalah cara
+ * escape string SQL standar ANSI - berlaku SELALU, di MySQL maupun MariaDB,
+ * apapun sql_mode-nya, gak ada mode yang mematikan perilaku ini karena itu
+ * bagian dari sintaks dasar string literal SQL itu sendiri (bukan fitur
+ * escape opsional kayak backslash).
  */
 function escapeSqlString(value) {
-  return String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  return String(value).replace(/'/g, "''");
 }
 
 /**

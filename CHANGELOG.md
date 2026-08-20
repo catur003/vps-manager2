@@ -3,6 +3,63 @@
 Changelog lama dihapus & mulai dari sini lagi sesuai permintaan. Riwayat fase
 sebelumnya masih ada di histori chat kalau sewaktu-waktu dibutuhkan.
 
+## Fase - Auto Installer multi-server, Wildcard SSL, Database Manager, shell EACCES (2026-08-20)
+
+### Fixed
+- **`scripts/setup-sudoers.sh`**: tambah scope NOPASSWD buat 3 command yang
+  sebelumnya gak pernah di-whitelist, bikin fitur terkait selalu gagal
+  "a terminal is required to read the password":
+  - `apt-get install -y python3-certbot-dns-cloudflare` + `tee
+    /etc/letsencrypt/cloudflare.ini` -> fitur **Wildcard SSL**
+  - `tail` (bare, path dinamis) -> fitur **Log Viewer**
+  - Tambah scope `firewall-cmd --state` dan `iptables -L INPUT -n`, nyambung
+    ke fix firewall generic di bawah.
+
+- **`src/security/security.js`** `checkFirewall()`: tambah fallback ketiga
+  ke iptables mentah (setelah ufw & firewalld). Server yang gak pakai
+  ufw/firewalld sama sekali (Oracle Cloud default, provider lain yang
+  defaultnya iptables polos) sebelumnya SELALU dilaporin gagal walau
+  firewall-nya sendiri sehat.
+
+- **`src/doctor/doctor.js`** `checkSudoCommands()`: cek 'firewall' sekarang
+  manggil `security.checkFirewall()` (ufw -> firewalld -> iptables)
+  alih-alih `sudo -n ufw status` mentah - konsisten sama Security Manager,
+  gak duplikat logic. `requiredCommands`: hapus 'ufw' dari daftar wajib.
+
+- **`src/database/database.js`** `escapeSqlString()`: ganti dari
+  backslash-escape (`'` -> `\'`) ke dobel-kutip (`'` -> `''`, standar ANSI
+  SQL, berlaku SELALU apapun sql_mode server-nya). Kebukti dari laporan
+  Zen: password mengandung tanda kutip bikin "ERROR 1064 - syntax error"
+  dan proses SQL berhenti di tengah (database ke-buat tapi user & grant-nya
+  gak pernah jalan). Sekalian export `runSQL` dan `escapeSqlString`
+  (dibutuhin fitur baru di bawah).
+
+- **`src/utils/shell.js`** `run()` dan `runArgs()`: default `cwd` diganti
+  dari `process.cwd()` ke `/tmp`. Root cause "spawnSync mysql EACCES":
+  proses vps-manager dijalanin via `sudo -u catur vps-manager` dari
+  direktori yang gak bisa diakses `catur` (mis. `/home/ubuntu`, permission
+  700) - Node re-chdir() ke situ SEBELUM exec command child, gagal EACCES
+  tapi errornya nunjuk ke command yang dipanggil, bukan ke masalah cwd.
+  Diaudit semua 70 pemanggilan shell.run()/runArgs() di codebase - yang
+  butuh cwd spesifik (git, npm, prisma - lewat git.js/build.js/deployNew.js)
+  semua sudah kasih opsi `cwd` eksplisit, jadi perubahan ini gak
+  mempengaruhi fitur lain.
+
+### Added
+- **`src/menu/mainMenu.js`**: menu baru **"Ganti Password Root DB"** di
+  Database Manager - beda dari "Reset Password User" (user database SATU
+  project) dan beda dari "Setup User Admin DB / fix auth_socket" (kasus
+  darurat root belum bisa password sama sekali). Alur 4-langkah anti-lock-out:
+  validasi kredensial lama -> ALTER USER -> tes ulang pakai password baru ->
+  config.json cuma di-update KALAU tes itu sukses. Config gak disentuh
+  kalau ada langkah yang gagal di tengah.
+
+### Notes (live-fix di server, di luar kode ini)
+- Cloudflare proxy domain `api.zenlab.id` diubah ke DNS-only
+- iptables Oracle Cloud dibuka buat port 80/443 + ufw diinstall & aktif
+- MariaDB di-uninstall, ganti MySQL (`mysql-server`), password root
+  disamakan ke `config.json`
+
 ## Fase 1 - Configuration Menu 13 Lengkap (2026-07-29)
 
 ### Changed

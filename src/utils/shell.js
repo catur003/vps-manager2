@@ -11,7 +11,19 @@ const logger = require('./logger');
  * atau gak reachable (mis. `prisma db push`, `npm install`, `npm run build`).
  */
 function run(command, options = {}) {
-  const { silent = false, cwd = process.cwd(), maxBuffer, timeoutMs, input } = options;
+  // FIXED (laporan Zen: "spawnSync mysql EACCES" padahal binary mysql
+  // sendiri permission-nya normal/executable): default cwd sebelumnya
+  // process.cwd() - direktori tempat proses Node ITU SENDIRI di-launch.
+  // Kalau proses vps-manager dijalanin via `sudo -u <user_lain> vps-manager`
+  // dari direktori yang gak bisa di-akses user tsb (mis. /home/ubuntu yang
+  // permission-nya 700, dipanggil sebagai `catur`), child process yang
+  // di-spawn (execFileSync/execSync) bakal gagal chdir() ke situ SEBELUM
+  // sempat exec command-nya sama sekali - errornya EACCES dan nunjuk ke
+  // command yang dipanggil (mis. "spawnSync mysql EACCES"), BUKAN ke
+  // masalah cwd-nya, jadi gampang salah diagnosis. /tmp SELALU bisa
+  // di-traverse semua user (permission 1777, sticky bit) - default paling
+  // aman buat command yang emang gak butuh cwd spesifik.
+  const { silent = false, cwd = '/tmp', maxBuffer, timeoutMs, input } = options;
   if (!silent) logger.info(`Menjalankan: ${command}`);
   try {
     const execOptions = { cwd, stdio: 'pipe' };
@@ -74,7 +86,10 @@ function runAsUser(user, command, options = {}) {
  * bisa/belum divalidasi dengan whitelist regex yang ketat.
  */
 function runArgs(file, args, options = {}) {
-  const { silent = false, cwd = process.cwd(), maxBuffer, timeoutMs, env, input } = options;
+  // FIXED: sama kasusnya kayak run() di atas - default cwd ke /tmp (bukan
+  // process.cwd()), biar gak gagal EACCES pas proses ini dijalanin dari
+  // direktori yang gak bisa di-akses user efektif command-nya.
+  const { silent = false, cwd = '/tmp', maxBuffer, timeoutMs, env, input } = options;
   if (!silent) logger.info(`Menjalankan: ${file} ${args.join(' ')}`);
   try {
     const execOptions = { cwd, stdio: 'pipe' };
