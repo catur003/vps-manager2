@@ -1618,6 +1618,7 @@ async function databaseManagerMenu() {
     { key: 'test-root', label: 'Tes Koneksi MySQL (root - cek service nyala)', hint: 'Cek apakah service MySQL/MariaDB bisa diakses pakai kredensial root yang ada di Configuration.' },
     { key: 'test-project', label: 'Tes Koneksi Database Project', hint: 'Tes koneksi pakai kredensial spesifik database tertentu (bukan root). Sekalian tampilkan info project yang pakai DB ini.' },
     { key: 'reset-password', label: 'Reset Password User (kalau lupa)' },
+    { key: 'change-root-password', label: '🔑 Ganti Password Root DB', hint: 'Ganti password user root/admin yang dipakai vps-manager sendiri (beda dari "Reset Password User" yang buat user database project). Kredensial lama divalidasi dulu sebelum diubah, dan password baru dites dulu sebelum Configuration ikut disinkron - kalau ada langkah yang gagal, config gak disentuh sama sekali.' },
     { key: 'back', label: '↩️  Kembali' },
   ]);
 
@@ -1721,6 +1722,123 @@ async function databaseManagerMenu() {
     logger.success(
       `✅ User "${dbUser}" berhasil dibuat dan tes koneksi sukses. Configuration otomatis di-update ` +
       `(db_root_user="${dbUser}") - semua fitur Database Manager & Backup Manager sekarang pakai user ini.`
+    );
+    await afterAction(databaseManagerMenu);
+    return;
+  }
+
+  /**
+   * Ganti password user root/admin yang DIPAKAI vps-manager (config.json
+   * db_root_user/db_root_password) - BEDA dari "reset-password" (itu buat
+   * user database punya SATU project spesifik). Beda juga dari "setup-admin"
+   * (itu buat kasus darurat root masih auth_socket/gak bisa password sama
+   * sekali) - fitur ini buat kasus NORMAL: root/admin udah password-based
+   * (hasil setup-admin ATAU hasil instalasi otomatis), tinggal mau diganti
+   * ke password baru.
+   *
+   * Alurnya SENGAJA berlapis (bukan langsung ALTER USER + save config):
+   * 1. Validasi kredensial LAMA di config masih beneran nyambung ke server
+   *    SEKARANG - kalau ternyata udah gak sinkron (mis. root direset manual
+   *    lewat SSH tanpa update config), berhenti duluan daripada nembak ALTER
+   *    USER pakai kredensial yang salah dan dapat error ambigu.
+   * 2. ALTER USER pakai kredensial LAMA yang udah tervalidasi.
+   * 3. Tes ulang pakai password BARU - baru dianggap valid kalau ini sukses.
+   * 4. BARU SETELAH langkah 3 sukses, config.json ikut di-update.
+   * Kalau salah satu langkah gagal, config TIDAK disentuh sama sekali -
+   * password lama tetap yang berlaku, operator gak ke-lock dari akses DB.
+   */
+  if (action === 'change-root-password') {
+    const cfg = config.loadConfig();
+    if (!cfg.db_root_user || !cfg.db_root_password) {
+      logger.error(
+        'Belum ada db_root_user/db_root_password di Configuration - pakai menu ' +
+        '"Setup User Admin DB (fix auth_socket)" dulu kalau root masih belum bisa login pakai password.'
+      );
+      await afterAction(databaseManagerMenu);
+      return;
+    }
+
+    logger.info(
+      `Ganti password untuk user "${cfg.db_root_user}" (kredensial yang sekarang dipakai vps-manager buat ` +
+      'semua fitur Database & Backup). Kredensial lama divalidasi dulu, baru diubah, baru dites ulang - ' +
+      'kalau ada langkah yang gagal, Configuration TIDAK disentuh sama sekali.'
+    );
+
+    const { newPassword, confirmPassword } = await inquirer.prompt([
+      { type: 'password', name: 'newPassword', message: 'Password baru (min 8 char, besar+kecil+angka+simbol):', mask: '*' },
+      { type: 'password', name: 'confirmPassword', message: 'Ulangi password baru:', mask: '*' },
+    ]);
+
+    if (!newPassword || newPassword.length < 8) {
+      logger.error('Password minimal 8 karakter.');
+      await afterAction(databaseManagerMenu);
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      logger.error('Password dan konfirmasi tidak sama.');
+      await afterAction(databaseManagerMenu);
+      return;
+    }
+    if (newPassword === cfg.db_root_password) {
+      logger.error('Password baru sama persis dengan yang lama - tidak ada yang diubah.');
+      await afterAction(databaseManagerMenu);
+      return;
+    }
+
+    // Step 1: validasi kredensial LAMA. 'mysql' dipakai sebagai dbName -
+    // database sistem bawaan yang PASTI selalu ada, trik yang sama kayak
+    // dipakai testCredentials() di alur setup-admin di atas, biar gak perlu
+    // nama database spesifik buat tes kredensial root/admin generik.
+    const currentCheck = database.testCredentials('mysql', cfg.db_root_user, cfg.db_root_password);
+    if (!currentCheck.ok) {
+      logger.error(
+        `Kredensial "${cfg.db_root_user}" di Configuration sudah tidak valid ke server ini: ${currentCheck.errorMessage}\n` +
+        'Configuration TIDAK diubah. Kalau root memang baru direset manual lewat SSH di luar tool ini, ' +
+        'samakan dulu manual sebelum pakai menu ini.'
+      );
+      await afterAction(databaseManagerMenu);
+      return;
+    }
+
+    // Step 2: ALTER USER - otentikasi masih pakai kredensial LAMA (config
+    // belum berubah sampai titik ini), scope ke localhost DAN 127.0.0.1
+    // sekaligus (sama pola kayak stepSetupDatabase pas instalasi awal),
+    // biar akses lokal & TCP (dipakai semua fitur app) tetap konsisten.
+    const escapedNew = database.escapeSqlString(newPassword);
+    const alterSql =
+      `ALTER USER '${cfg.db_root_user}'@'localhost' IDENTIFIED BY '${escapedNew}'; ` +
+      `ALTER USER '${cfg.db_root_user}'@'127.0.0.1' IDENTIFIED BY '${escapedNew}'; ` +
+      'FLUSH PRIVILEGES;';
+    const alterResult = database.runSQL(alterSql);
+    if (!alterResult.ok) {
+      logger.error(
+        `Gagal ganti password: ${alterResult.errorMessage}\n` +
+        'Configuration TIDAK diubah - password lama masih berlaku seperti biasa.'
+      );
+      await afterAction(databaseManagerMenu);
+      return;
+    }
+
+    // Step 3: verifikasi password BARU beneran kepake SEBELUM config
+    // ke-update - jaga-jaga ALTER "sukses" tapi state-nya gak konsisten
+    // (jarang terjadi, tapi ini yang bikin operator gak ke-lock kalau
+    // ternyata ada yang aneh).
+    const newCheck = database.testCredentials('mysql', cfg.db_root_user, newPassword);
+    if (!newCheck.ok) {
+      logger.error(
+        `Password di server KEMUNGKINAN sudah berubah tapi verifikasi ulang gagal: ${newCheck.errorMessage}\n` +
+        'Configuration TIDAK diubah supaya app gak langsung putus akses. JANGAN tutup terminal ini - ' +
+        'catat manual password baru yang barusan diketik, lalu cek koneksi manual lewat SSH sebelum lanjut.'
+      );
+      await afterAction(databaseManagerMenu);
+      return;
+    }
+
+    // Step 4: baru sekarang config di-update, SETELAH password baru
+    // kebukti beneran kepake.
+    config.saveConfig({ ...cfg, db_root_password: newPassword });
+    logger.success(
+      `✅ Password untuk user "${cfg.db_root_user}" berhasil diganti dan Configuration sudah disinkron otomatis.`
     );
     await afterAction(databaseManagerMenu);
     return;

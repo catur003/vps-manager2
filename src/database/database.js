@@ -445,4 +445,10 @@ module.exports = {
   mysqlCreds,
   isValidName,
   interpretMysqlError,
+  // FIXED: dibutuhin src/menu/mainMenu.js buat fitur baru "Ganti Password
+  // Root DB" (bukan reset password user project - itu resetPassword() yang
+  // udah ada) - sebelumnya dua fungsi ini gak diexport sama sekali, padahal
+  // udah dipakai internal di file ini, jadi gak bisa dipanggil dari luar.
+  runSQL,
+  escapeSqlString,
 };
