@@ -45,7 +45,7 @@ const MENU_ITEMS = [
   { key: '5', label: '⚙️  PM2 Manager', hint: 'PM2 = program yang menjaga app Node kamu tetap nyala. Start/Stop/Restart/Logs app di sini.' },
   { key: '6', label: '🌐 Nginx Manager', hint: 'Nginx = pintu masuk web server, ngarahin domain ke port app kamu. Atur domain/reverse proxy di sini.' },
   { key: '7', label: '🔐 SSL Manager', hint: 'Aktifin/cek HTTPS (gembok hijau) untuk domain, via Let\'s Encrypt (certbot).' },
-  { key: '8', label: '🔑 Permission Manager', hint: 'Cek apakah folder project dimiliki user yang benar (biar tidak ada masalah izin akses).' },
+  { key: '8', label: '🔑 Permission Manager', hint: 'Cek apakah folder project dimiliki user yang benar, dan langsung tawarin fix (chown) kalau ketauan owner-nya beda.' },
   { key: '9', label: '🗄️  Database Manager', hint: 'Lihat daftar database & isi tabel (read-only, aman untuk dicek-cek).' },
   { key: '10', label: '📊 Server Monitor', hint: 'Cek pemakaian CPU/RAM/Disk server saat ini.' },
   { key: '11', label: '💾 Backup Manager', hint: 'Backup/restore folder project atau database ke file arsip.' },
@@ -337,8 +337,27 @@ async function permissionManagerMenu() {
   const projects = registry.listProjects();
   const cfg = config.loadConfig();
 
-  if (projects.length === 0) {
-    logger.warn('Belum ada project untuk dicek.');
+  // FIXED (laporan Zen: "/opt/apps juga butuh chown, tapi Permission
+  // Manager cuma detect project yang kedaftar PM2/registry") - sebelumnya
+  // menu ini CUMA bisa cek project yang udah kedaftar di registry.js, gak
+  // pernah nyentuh folder INDUK-nya sendiri (`default_folder` di
+  // Configuration, biasanya `/opt/apps`). Kalau folder induk itu sendiri
+  // ownernya salah (mis. masih `root` dari provisioning awal, atau `ubuntu`
+  // dari sebelum pindah ke deploy_user `catur`), `catur` bisa gagal
+  // list/masuk folder itu sama sekali - lebih fundamental dari sekadar
+  // project spesifik yang belum ke-chown.
+  if (!cfg.default_folder) {
+    logger.warn('default_folder belum diset di Configuration - gak bisa dicek.');
+  }
+
+  const choices = [
+    ...(cfg.default_folder ? [`📁 Folder utama (${cfg.default_folder})`] : []),
+    ...projects.map((p) => p.name),
+    '↩️  Kembali',
+  ];
+
+  if (!cfg.default_folder && projects.length === 0) {
+    logger.warn('Belum ada folder utama maupun project untuk dicek.');
     await afterAction(permissionManagerMenu);
     return;
   }
@@ -347,8 +366,8 @@ async function permissionManagerMenu() {
     {
       type: 'list',
       name: 'name',
-      message: 'Pilih project untuk cek permission:',
-      choices: [...projects.map((p) => p.name), '↩️  Kembali'],
+      message: 'Pilih yang mau dicek:',
+      choices,
     },
   ]);
   if (name === '↩️  Kembali') {
@@ -356,9 +375,55 @@ async function permissionManagerMenu() {
     return;
   }
 
-  const project = registry.findProject(name);
-  const result = safety.checkPermission(project.path, cfg.deploy_user);
+  const isMainFolder = cfg.default_folder && name === `📁 Folder utama (${cfg.default_folder})`;
+  const targetPath = isMainFolder ? cfg.default_folder : registry.findProject(name).path;
+
+  const result = safety.checkPermission(targetPath, cfg.deploy_user);
   result.pass ? logger.success(result.message) : logger.error(result.message);
+
+  /**
+   * FIXED (kasus nyata Zen: deploy awal pakai user `ubuntu`, belakangan
+   * pindah `deploy_user` ke `catur` di Configuration) - project LAMA yang
+   * folder-nya masih kepemilikan user lama TIDAK bisa dikelola `catur`
+   * (git pull/npm install/pm2 restart semua bakal EACCES), dan sebelumnya
+   * satu-satunya cara benerin adalah `sudo chown -R` manual lewat SSH -
+   * padahal binary chown UDAH ada di sudoers whitelist API_USER dari awal,
+   * cuma menu ini belum pernah manfaatin buat nawarin fix langsung.
+   *
+   * "Bisa dibypass?" - secara teknis bisa (balikin deploy_user ke user lama
+   * yang emang jadi owner folder-folder itu), tapi itu cuma mindahin
+   * masalah, bukan nyelesain: nanti project BARU yang dibuat sebagai
+   * deploy_user baru bakal balik lagi konflik sama yang lama. chown SEKALI
+   * di sini nyelesain permanen, folder ikutan konsisten sama deploy_user
+   * yang aktif di Configuration sekarang - itu kenapa opsi fix ini
+   * ditawarin di sini, bukan sekadar disuruh ganti config balik.
+   *
+   * Folder utama (`/opt/apps`) SENGAJA TIDAK dipakai `-R` (recursive) kalau
+   * isinya udah ada project lain yang mungkin sengaja beda owner (mis.
+   * project non-Node yang dikelola manual) - cuma benerin folder itu
+   * SENDIRI, bukan seluruh isinya, biar gak nimpa owner project lain yang
+   * gak dimaksud. Project spesifik (dipilih dari registry) tetap pakai
+   * `-R` karena itu emang scope-nya satu project itu doang.
+   */
+  if (!result.pass) {
+    const chownArgs = isMainFolder
+      ? ['chown', `${cfg.deploy_user}:${cfg.deploy_user}`, targetPath]
+      : ['chown', '-R', `${cfg.deploy_user}:${cfg.deploy_user}`, targetPath];
+    const { fix } = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'fix',
+        message: `Perbaiki sekarang? Ini akan jalankan: sudo ${chownArgs.join(' ')}`,
+        default: false,
+      },
+    ]);
+    if (fix) {
+      const chownResult = shell.runArgs('sudo', chownArgs);
+      chownResult.ok
+        ? logger.success(`Owner "${targetPath}" berhasil diubah ke "${cfg.deploy_user}". Coba deploy/git pull lagi sekarang.`)
+        : logger.error(`Gagal chown: ${chownResult.errorMessage}`);
+    }
+  }
 
   await afterAction(permissionManagerMenu);
 }
