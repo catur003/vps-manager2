@@ -104,7 +104,7 @@ function prepareAndClone(opts, onStep = () => {}) {
     // SETELAH clone (install/build/dll) yang sengaja TIDAK di-rollback
     // karena folder itu sudah berisi source code asli yang mungkin masih
     // mau diperbaiki manual (lihat catatan di komentar function ini).
-    const rollback = cleanup.deleteProjectFolder(deployUser, folderPath);
+    const rollback = cleanup.deleteProjectFolder(deployUser, folderPath, { asRoot: true });
     const rollbackNote = rollback.ok
       ? ' Folder kosong yang sempat dibuat sudah otomatis dibersihkan - bisa langsung deploy ulang tanpa hapus folder manual.'
       : ` Folder kosong yang sempat dibuat GAGAL dibersihkan otomatis (${rollback.errorMessage}) - mungkin masih perlu dihapus manual sebelum deploy ulang.`;

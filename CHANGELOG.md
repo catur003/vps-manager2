@@ -66,6 +66,24 @@ sebelumnya masih ada di histori chat kalau sewaktu-waktu dibutuhkan.
   validasi kredensial lama -> ALTER USER -> tes ulang pakai password baru ->
   config.json cuma di-update KALAU tes itu sukses. Config gak disentuh
   kalau ada langkah yang gagal di tengah.
+- **`src/menu/mainMenu.js`** Permission Manager: sebelumnya cuma bisa cek
+  project yang udah kedaftar di registry, sekarang bisa cek & langsung
+  tawarin fix (`chown`) buat **folder utama** (`default_folder`, mis.
+  `/opt/apps`) juga - dengan konfirmasi sebelum jalan, dan folder utama
+  sengaja non-recursive (cuma folder itu sendiri) biar gak nimpa owner
+  project lain di dalamnya.
+
+### Fixed (lanjutan)
+- **`src/cleanup/cleanup.js`** `deleteProjectFolder()` + **`src/deploy/deployNew.js`**:
+  auto-rollback pas "Deploy Project Baru" gagal di step Git Clone
+  sebelumnya coba hapus folder yang baru dibuat SEBAGAI `deployUser` - gagal
+  kalau folder INDUK (`default_folder`) masih milik `root` (mkdir+chown
+  awal cuma nyentuh folder leaf, bukan foldernya sendiri). Hapus butuh izin
+  WRITE ke folder induk, bukan cuma ownership ke folder yang dihapus. Sekarang
+  rollback khusus ini (`{ asRoot: true }`) jalan sebagai root - aman karena
+  foldernya juga baru aja dibikin root beberapa detik sebelumnya, belum ada
+  isi apa-apa. Fitur hapus project yang disengaja (`deleteProject.js`) TETAP
+  jalan sebagai owner seperti biasa, gak diubah.
 
 ### Notes (live-fix di server, di luar kode ini)
 - Cloudflare proxy domain `api.zenlab.id` diubah ke DNS-only

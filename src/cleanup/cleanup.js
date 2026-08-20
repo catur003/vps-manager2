@@ -185,7 +185,7 @@ function deletePath(owner, targetPath, home) {
  * shell.runAsUser() (string interpolation) ke shell.runAsUserArgs() (argv
  * terpisah).
  */
-function deleteProjectFolder(owner, targetPath) {
+function deleteProjectFolder(owner, targetPath, options = {}) {
   if (!targetPath || !targetPath.startsWith('/')) {
     return { ok: false, errorMessage: 'Path project tidak valid (bukan absolute path).' };
   }
@@ -199,6 +199,22 @@ function deleteProjectFolder(owner, targetPath) {
   }
   if (isBlacklisted(normalized)) {
     return { ok: false, errorMessage: 'Path ini termasuk folder sistem - dibatalkan demi keamanan.' };
+  }
+  // FIXED (laporan Zen: auto-rollback gagal pas git clone error di
+  // deployNew.js) - default-nya masih `rm` SEBAGAI `owner` (deployUser),
+  // yang PALING SERING dipakai buat hapus project yang UDAH LAMA dipakai
+  // (deleteProject.js - folder itu emang milik deployUser dari awal, aman
+  // dihapus sebagai dia). TAPI buat rollback folder yang BARU SEKALIAN
+  // dibikin (`mkdir -p` + `chown` LEAF doang, folder INDUK/default_folder
+  // masih milik root mode 755), `deployUser` gagal ngehapus WALAU folder
+  // itu miliknya - hapus/unlink butuh izin WRITE ke folder INDUK, bukan
+  // cuma ownership ke folder yang dihapus. `options.asRoot: true` (dipakai
+  // khusus dari rollback deployNew.js) lewatin masalah ini total - aman
+  // karena folder itu juga baru aja dibikin ROOT beberapa detik sebelumnya
+  // via mkdir, belum ada isi berharga sama sekali (clone belum sempat
+  // jalan/selesai).
+  if (options.asRoot) {
+    return shell.runArgs('sudo', ['rm', '-rf', normalized], { silent: true });
   }
   return shell.runAsUserArgs(owner, 'rm', ['-rf', normalized], { silent: true });
 }
