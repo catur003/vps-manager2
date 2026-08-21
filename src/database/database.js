@@ -454,6 +454,86 @@ function testCredentials(dbName, dbUser, password) {
   return { ok: true };
 }
 
+/**
+ * Install (kalau belum ada) + amankan MariaDB, sinkron root credential ke
+ * config.json. SEBELUMNYA logic ini cuma pernah ada sebagai rangkaian raw
+ * SSH command di installFlow.ts (mobile) - gak bisa dipakai ulang dari CLI
+ * maupun dari installer backend baru (bin/vps-bootstrap.js). Diextract ke
+ * sini jadi SATU sumber kebenaran: fix apapun ke depan (syntax SQL, live
+ * verification, dll) otomatis kepakai dari SEMUA jalur pemanggilan.
+ *
+ * Idempotent + self-healing (FIXED, laporan Zen): kalau config.json udah
+ * punya db_root_password TAPI server-nya udah gak nyambung pakai kredensial
+ * itu (server di-purge/rusak belakangan), TETAP lanjut install/secure ulang
+ * - bukan asal skip cuma karena config-nya "kelihatan" udah pernah diisi.
+ *
+ * Pakai plain `IDENTIFIED BY` (BUKAN `IDENTIFIED WITH mysql_native_password
+ * BY`) - lihat catatan di escapeSqlString soal kenapa: syntax WITH...BY itu
+ * khusus MySQL 8.0, MariaDB (yang paling umum kepasang di server Ubuntu
+ * lewat `apt install mariadb-server`, dan bahkan sering "menyamar" jadi
+ * `mysql-server` juga) nolak dengan syntax error.
+ */
+function setupRootDatabase() {
+  const cfg = config.loadConfig();
+
+  if (cfg.db_root_user && cfg.db_root_password) {
+    const liveCheck = testCredentials('mysql', cfg.db_root_user, cfg.db_root_password);
+    if (liveCheck.ok) {
+      return {
+        ok: true,
+        message: `Database udah pernah di-setup sebelumnya (user "${cfg.db_root_user}") dan masih bisa dikonek - dilewatin, gak diulang.`,
+      };
+    }
+    // Config ada tapi udah gak valid (server ke-purge/rusak belakangan) -
+    // lanjut install/secure ulang di bawah, JANGAN return di sini.
+  }
+
+  const installResult = shell.run(
+    [
+      'sudo apt-get update -y >/dev/null 2>&1',
+      'sudo apt-get install -y mariadb-server >/dev/null 2>&1',
+      'sudo systemctl enable --now mariadb >/dev/null 2>&1',
+      // FIXED: check sukses/gagal SEBELUMNYA (`command -v mysql`) ngecek
+      // CLIENT command doang, yang bisa udah ada dari paket lain SEBELUM
+      // baris ini sempat jalan - false-positive "server ada" padahal cuma
+      // client. `systemctl is-active` cuma true kalau SERVICE beneran nyala.
+      'systemctl is-active --quiet mariadb && echo HAS_DB_SERVER || echo NO_DB_SERVER',
+    ].join(' && ')
+  );
+  if (!installResult.ok || !installResult.output.includes('HAS_DB_SERVER')) {
+    return { ok: false, errorMessage: `Gagal install MariaDB server: ${installResult.errorMessage || installResult.output}` };
+  }
+
+  const socketCheck = shell.run('sudo mysql -e "SELECT 1;" >/dev/null 2>&1 && echo SOCKET_OK || echo SOCKET_FAIL', { silent: true });
+  if (!socketCheck.output.includes('SOCKET_OK')) {
+    return {
+      ok: false,
+      errorMessage:
+        'MariaDB terinstall & jalan, tapi root udah punya auth/password custom dari sebelumnya (kemungkinan pernah di-setup manual) - ' +
+        'gak bisa ditebak otomatis. Isi manual db_root_user/db_root_password lewat Configuration kalau tau kredensial lamanya, ' +
+        'atau reset manual: sudo mysql_secure_installation.',
+    };
+  }
+
+  const password = generatePassword(32);
+  const escapedPassword = escapeSqlString(password);
+  const secureSql = [
+    `ALTER USER 'root'@'localhost' IDENTIFIED BY '${escapedPassword}';`,
+    `CREATE USER IF NOT EXISTS 'root'@'127.0.0.1' IDENTIFIED BY '${escapedPassword}';`,
+    `GRANT ALL PRIVILEGES ON *.* TO 'root'@'127.0.0.1' WITH GRANT OPTION;`,
+    `DELETE FROM mysql.user WHERE User='';`,
+    `DROP DATABASE IF EXISTS test;`,
+    `FLUSH PRIVILEGES;`,
+  ].join(' ');
+  const secureResult = shell.run(`sudo mysql -e "${secureSql.replace(/"/g, '\\"')}"`, { silent: true });
+  if (!secureResult.ok) {
+    return { ok: false, errorMessage: `MariaDB terinstall tapi gagal di-secure: ${secureResult.errorMessage}` };
+  }
+
+  config.saveConfig({ ...config.loadConfig(), db_root_user: 'root', db_root_password: password });
+  return { ok: true, message: 'MariaDB terinstall, diamankan (anonymous user & database test dibuang), root password digenerate & disinkron ke config.' };
+}
+
 module.exports = {
   listDatabases,
   hasGrantOption,
@@ -478,4 +558,5 @@ module.exports = {
   // udah dipakai internal di file ini, jadi gak bisa dipanggil dari luar.
   runSQL,
   escapeSqlString,
+  setupRootDatabase,
 };

@@ -120,6 +120,11 @@ const POLICY = {
   // Pull nambah commit baru dari remote - gampang "diundo" (checkout balik/
   // reset), gak perlu confirm.
   'git.pull': { confirmRequired: false, auditLevel: 'write' },
+  // Push ngirim commit LOKAL ke remote (GitHub) - beda dari pull, efeknya
+  // KELUAR dari VPS ini (bisa nimpa/nambah history yang orang lain lihat di
+  // GitHub). confirmRequired: true - operator harus sadar betul sebelum
+  // history remote ke-ubah, gak sesantai pull yang efeknya cuma lokal.
+  'git.push': { confirmRequired: true, auditLevel: 'write' },
   // Checkout ganti branch aktif project - bisa bikin behavior app berubah
   // drastis kalau branch salah, tapi gampang checkout balik, gak perlu confirm.
   'git.checkout': { confirmRequired: false, auditLevel: 'write' },
