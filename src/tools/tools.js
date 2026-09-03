@@ -79,4 +79,20 @@ function installTool(key) {
   return { ok: true, output: result.output };
 }
 
-module.exports = { TOOLS, detectTools, installTool, findTool };
+/**
+ * Uninstall satu tool lewat `sudo apt-get remove -y <pkg>` (BUKAN `purge` -
+ * `remove` doang, config file/data yang udah ada dibiarin, jadi kalau
+ * di-install ulang lagi settingannya masih ada - lebih aman/reversible
+ * daripada purge). Sama pola kayak installTool(): `pkg` SELALU dari TOOLS
+ * (lookup by key), gak pernah dari body request langsung.
+ */
+function uninstallTool(key) {
+  const tool = findTool(key);
+  if (!tool) return { ok: false, errorMessage: `Tool "${key}" tidak dikenal.` };
+
+  const result = shell.runArgs('sudo', ['apt-get', 'remove', '-y', tool.pkg], { timeoutMs: 3 * 60 * 1000 });
+  if (!result.ok) return { ok: false, errorMessage: result.errorMessage };
+  return { ok: true, output: result.output };
+}
+
+module.exports = { TOOLS, detectTools, installTool, uninstallTool, findTool };

@@ -17,6 +17,8 @@ const DEFAULT_CONFIG = {
   certbot_email: '',
   db_root_user: 'root',
   db_root_password: '',
+  pg_root_user: 'postgres',
+  pg_root_password: '',
   backup_dir: '/www/backup_manager',
   backup_retention_days: 7,
   nginx_log_dir: '/www/wwwlogs',

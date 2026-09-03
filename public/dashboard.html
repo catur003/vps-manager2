@@ -360,6 +360,7 @@
   <div class="nav-item" data-page="node" data-label="Node Manager"><span class="nav-icon" style="color:#3ba55d"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4.5v11L12 22l-8-4.5v-11L12 2z"/><path d="M12 22V12M20 6.5L12 12M4 6.5L12 12"/></svg></span><span class="nav-label">Node Manager</span></div>
   <div class="nav-item" data-page="redis" data-label="Redis"><span class="nav-icon" style="color:#dc2626"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l9 4.5v11L12 22l-9-4.5v-11L12 2z"/><path d="M12 12l9-4.5M12 12v10M12 12L3 7.5"/></svg></span><span class="nav-label">Redis</span></div>
   <div class="nav-item" data-page="database" data-label="Database"><span class="nav-icon" style="color:#06b6d4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></span><span class="nav-label">Database</span></div>
+  <div class="nav-item" data-page="postgres" data-label="PostgreSQL"><span class="nav-icon" style="color:#336791"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></span><span class="nav-label">PostgreSQL</span></div>
 
   <div class="nav-section-label">Infrastruktur</div>
   <div class="nav-item" data-page="domains" data-label="Domains / SSL"><span class="nav-icon" style="color:#10b981"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"/></svg></span><span class="nav-label">Domains / SSL</span></div>
@@ -546,6 +547,16 @@
     <input id="db-search" placeholder="Cari database..." style="max-width:320px;margin-bottom:12px" oninput="renderDbTable()" />
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;overflow-x:auto">
       <div id="db-grid"><div class="empty">Memuat...</div></div>
+    </div>
+  </div>
+
+  <div class="page" id="page-postgres">
+    <div class="topbar"><h1>PostgreSQL</h1><button onclick="openCreatePgModal()">+ Database Baru</button></div>
+    <p style="color:var(--ink-muted);font-size:12.5px;margin:-10px 0 16px">Kelola database PostgreSQL di server ini.</p>
+    <div class="stats-row" id="pg-stats-row" style="margin-bottom:16px"></div>
+    <input id="pg-search" placeholder="Cari database..." style="max-width:320px;margin-bottom:12px" oninput="renderPgTable()" />
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;overflow-x:auto">
+      <div id="pg-grid"><div class="empty">Memuat...</div></div>
     </div>
   </div>
 
@@ -994,6 +1005,7 @@ const REFRESHERS = {
   node: () => refreshNode(),
   database: refreshDb,
   redis: refreshRedis,
+  postgres: refreshPg,
   domains: refreshDomains,
   nginx: refreshNginx,
   backup: refreshBackups,
@@ -2788,7 +2800,7 @@ function renderToolsGrid() {
         <div class="app-card">
           <div class="card-top"><span class="card-name">${t.name}</span><span class="card-status"><span class="dot ${t.installed ? 'green' : 'gray'}"></span>${t.installed ? 'terinstall' : 'belum'}</span></div>
           <div class="card-actions">
-            ${t.installed ? '<button class="secondary" disabled>Sudah Terinstall</button>' : `<button onclick="installTool('${t.key}', this)">Install</button>`}
+            ${t.installed ? `<button class="danger" onclick="uninstallTool('${t.key}','${t.name.replace(/'/g, "\\'")}')">Uninstall</button>` : `<button onclick="installTool('${t.key}', this)">Install</button>`}
           </div>
         </div>
         `).join('')}
@@ -2803,6 +2815,17 @@ async function installTool(key, btn) {
     toast(`${key} berhasil diinstall.`, 'success');
     refreshTools();
   } catch (e) { toast(`Gagal install ${key}: ${e.message}`, 'error'); btn.disabled = false; btn.textContent = 'Install'; }
+}
+function uninstallTool(key, name) {
+  showConfirmModal({
+    title: `Uninstall "${name}"?`,
+    description: 'Package-nya dihapus dari server (config/data yang udah ada tetap dibiarin, "apt-get remove" bukan "purge"). Aplikasi yang masih bergantung ke ini bisa berhenti berfungsi.',
+    danger: true,
+    confirmLabel: 'Uninstall',
+    onConfirm: () => api(`/tools/${encodeURIComponent(key)}/uninstall`, { method: 'POST', body: JSON.stringify({ confirm: true }) })
+      .then(() => { toast(`${name} berhasil di-uninstall.`, 'success'); refreshTools(); })
+      .catch((e) => toast(`Gagal uninstall ${name}: ${e.message}`, 'error')),
+  });
 }
 
 // ---------- SSH Keys ----------
@@ -3769,6 +3792,114 @@ async function submitCreateDb() {
       </div>
     `;
   } catch (e) { toast('Gagal buat database: ' + e.message, 'error'); }
+}
+
+// ---------- PostgreSQL ----------
+let pgCache = [];
+async function refreshPg() {
+  try {
+    const pgData = await api('/postgres');
+    if (pgData.notInstalled) {
+      document.getElementById('pg-stats-row').innerHTML = '';
+      document.getElementById('pg-grid').innerHTML = notInstalledCard('PostgreSQL');
+      return;
+    }
+    const { databases, serverVersion } = pgData;
+    pgCache = databases || [];
+    const chip = (color, path) => `<div class="stat-icon-chip" style="background:${color}22;color:${color}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${path}</svg></div>`;
+    const totalSize = pgCache.reduce((sum, db) => sum + (db.sizeBytes || 0), 0);
+    document.getElementById('pg-stats-row').innerHTML = `
+      <div class="stat-card"><div class="stat-card-head">${chip('#336791', '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/>')}<div class="stat-label">Total Database</div></div><div class="stat-value">${pgCache.length}</div></div>
+      <div class="stat-card"><div class="stat-card-head">${chip('#22c55e', '<path d="M13 2L3 14h7l-1 8 11-14h-7l1-8z"/>')}<div class="stat-label">Storage Used</div></div><div class="stat-value">${fmtBytesGeneric(totalSize)}</div></div>
+      <div class="stat-card"><div class="stat-card-head">${chip('#7c6cf0', '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8"/>')}<div class="stat-label">Server Version</div></div><div class="stat-value" style="font-size:13px">${serverVersion || '-'}</div></div>
+    `;
+    renderPgTable();
+  } catch (e) { document.getElementById('pg-grid').innerHTML = `<div class="empty">Gagal: ${e.message}</div>`; }
+}
+function renderPgTable() {
+  const grid = document.getElementById('pg-grid');
+  const query = (document.getElementById('pg-search')?.value || '').trim().toLowerCase();
+  const filtered = !query ? pgCache : pgCache.filter((db) => db.name.toLowerCase().includes(query));
+
+  if (!filtered.length) { grid.innerHTML = '<div class="empty">Belum ada database.</div>'; return; }
+  grid.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:500px">
+      <thead>
+        <tr style="border-bottom:1px solid var(--border);text-align:left;color:var(--ink-muted);font-size:11px;text-transform:uppercase">
+          <th style="padding:10px 14px">Nama Database</th><th>Ukuran</th><th style="padding-right:14px">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${filtered.map((db) => `
+          <tr style="border-bottom:1px solid var(--border)">
+            <td style="padding:10px 14px"><b>${db.name}</b></td>
+            <td>${db.sizeLabel}</td>
+            <td style="white-space:nowrap;padding-right:14px">
+              <button class="secondary" style="padding:4px 8px;font-size:11px" onclick="resetPgPassword('${db.name}')">Reset Password</button>
+              <button class="danger" style="padding:4px 8px;font-size:11px" onclick="deletePg('${db.name}')">Hapus</button>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+function openCreatePgModal() {
+  document.getElementById('modal-root').innerHTML = `
+    <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <h3>Database PostgreSQL Baru</h3>
+        <label>Nama Database</label><input id="new-pg-name" placeholder="mis. myapp_prod" />
+        <label>Nama User</label><input id="new-pg-user" placeholder="mis. myapp_user" />
+        <div class="modal-actions">
+          <button class="secondary" onclick="document.getElementById('modal-root').innerHTML=''">Batal</button>
+          <button onclick="submitCreatePg()">Buat</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+async function submitCreatePg() {
+  const dbName = document.getElementById('new-pg-name').value.trim();
+  const dbUser = document.getElementById('new-pg-user').value.trim();
+  if (!dbName || !dbUser) { toast('Nama database & user wajib diisi.', 'error'); return; }
+  try {
+    const result = await api('/postgres', { method: 'POST', body: JSON.stringify({ dbName, dbUser }) });
+    document.getElementById('modal-root').innerHTML = `
+      <div class="modal-backdrop">
+        <div class="modal">
+          <h3>Database dibuat</h3>
+          <p style="font-size:12.5px;color:var(--ink-muted)">Simpan kredensial ini SEKARANG - gak akan ditampilkan lagi.</p>
+          <pre class="logbox">host: 127.0.0.1
+port: 5432
+database: ${result.dbName}
+user: ${result.dbUser}
+password: ${result.password}</pre>
+          <div class="modal-actions"><button onclick="document.getElementById('modal-root').innerHTML='';refreshPg()">Selesai</button></div>
+        </div>
+      </div>
+    `;
+  } catch (e) { toast('Gagal buat database: ' + e.message, 'error'); }
+}
+async function resetPgPassword(dbName) {
+  const dbUser = prompt(`Reset password user PostgreSQL untuk database "${dbName}" - masukkan nama usernya:`);
+  if (!dbUser) return;
+  try {
+    const result = await api(`/postgres/${encodeURIComponent(dbName)}/reset-password`, { method: 'POST', body: JSON.stringify({ dbUser }) });
+    alert('Password baru untuk user "' + dbUser + '":\n\n' + result.password);
+  } catch (e) { toast('Gagal reset: ' + e.message, 'error'); }
+}
+function deletePg(name) {
+  const dbUser = prompt(`Hapus database "${name}" - masukkan nama user pemiliknya (biar role-nya ikut dihapus, kosongkan kalau gak tau):`) || '';
+  showConfirmModal({
+    title: `Hapus database "${name}"?`,
+    description: 'Seluruh isi database ini akan hilang permanen. Pastikan sudah backup kalau masih dibutuhkan.',
+    danger: true,
+    confirmLabel: 'Hapus Database',
+    onConfirm: () => api(`/postgres/${encodeURIComponent(name)}`, { method: 'DELETE', body: JSON.stringify({ confirm: true, dbUser }) })
+      .then(() => { toast(`"${name}" dihapus.`, 'success'); refreshPg(); })
+      .catch((e) => toast('Gagal hapus: ' + e.message, 'error')),
+  });
 }
 
 // ---------- Domains / SSL ----------

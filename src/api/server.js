@@ -34,6 +34,7 @@ const cronRoutes = require('./routes/cron.routes');
 const webhookRoutes = require('./routes/webhook.routes');
 const cloudflareRoutes = require('./routes/cloudflare.routes');
 const redisRoutes = require('./routes/redis.routes');
+const postgresRoutes = require('./routes/postgres.routes');
 const config = require('../config/config');
 const ssl = require('../ssl/ssl');
 const notify = require('../notify/notify');
@@ -156,6 +157,7 @@ function createServer() {
   app.use('/cron', cronRoutes);
   app.use('/cloudflare', cloudflareRoutes);
   app.use('/redis', redisRoutes);
+  app.use('/postgres', postgresRoutes);
 
   app.use((req, res) => {
     res.status(404).json({ success: false, message: 'Endpoint tidak ditemukan.', code: 'NOT_FOUND' });

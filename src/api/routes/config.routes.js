@@ -36,6 +36,8 @@ const EDITABLE_FIELDS = [
   'ai_model_filter',
   'additional_pm2_users',
   'cloudflare_api_token',
+  'pg_root_user',
+  'pg_root_password',
 ];
 
 function guard(action, res) {
@@ -54,6 +56,7 @@ function guard(action, res) {
 function maskConfig(cfg) {
   const {
     db_root_password: dbPassword,
+    pg_root_password: pgPassword,
     telegram_bot_token: telegramBotToken,
     webhook_secret: webhookSecret,
     ai_api_key: aiApiKey,
@@ -65,6 +68,7 @@ function maskConfig(cfg) {
   return {
     ...rest,
     hasDbPassword: Boolean(dbPassword),
+    hasPgPassword: Boolean(pgPassword),
     hasTelegramBotToken: Boolean(telegramBotToken),
     hasWebhookSecret: Boolean(webhookSecret),
     hasAiApiKey: Boolean(aiApiKey),

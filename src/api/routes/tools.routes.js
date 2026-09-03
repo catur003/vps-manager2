@@ -38,4 +38,27 @@ router.post('/:key/install', (req, res) => {
   res.json({ success: true, message: `Tool "${key}" berhasil diinstall.` });
 });
 
+router.post('/:key/uninstall', (req, res) => {
+  const ACTION = 'tools.uninstall';
+  const policy = commandPolicy.getPolicy(ACTION);
+  if (!policy) return res.status(403).json({ success: false, message: 'Action belum diizinkan.', code: 'ACTION_NOT_ALLOWED' });
+  const { key } = req.params;
+  if (!tools.findTool(key)) {
+    return res.status(400).json({ success: false, message: `Tool "${key}" tidak dikenal.`, code: 'INVALID_INPUT' });
+  }
+  if (policy.confirmRequired && req.body?.confirm !== true) {
+    return res.status(400).json({ success: false, message: `Kirim ulang dengan { "confirm": true } untuk uninstall "${key}".`, code: 'CONFIRM_REQUIRED' });
+  }
+
+  const startedAt = Date.now();
+  const auditId = audit.recordStart({ action: ACTION, ip: req.ip, params: { key } });
+  const result = tools.uninstallTool(key);
+  audit.recordEnd(auditId, { success: result.ok, message: result.errorMessage || 'OK', durationMs: Date.now() - startedAt });
+
+  if (!result.ok) {
+    return res.status(400).json({ success: false, message: result.errorMessage, code: 'TOOLS_UNINSTALL_FAILED' });
+  }
+  res.json({ success: true, message: `Tool "${key}" berhasil di-uninstall.` });
+});
+
 module.exports = router;

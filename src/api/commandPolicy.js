@@ -164,6 +164,12 @@ const POLICY = {
   'cloudflare.securityLevel': { confirmRequired: false, auditLevel: 'read' },
   'redis.status': { confirmRequired: false, auditLevel: 'read' },
   'docker.inspect': { confirmRequired: false, auditLevel: 'read' },
+  'postgres.list': { confirmRequired: false, auditLevel: 'read' },
+  'postgres.create': { confirmRequired: false, auditLevel: 'write' },
+  'postgres.resetPassword': { confirmRequired: false, auditLevel: 'write' },
+  'postgres.drop': { confirmRequired: true, auditLevel: 'write' },
+  'postgres.test': { confirmRequired: false, auditLevel: 'read' },
+  'tools.uninstall': { confirmRequired: true, auditLevel: 'write' },
   'cloudflare.purgeCache': { confirmRequired: false, auditLevel: 'write' },
   'cloudflare.underAttack': { confirmRequired: false, auditLevel: 'write' },
 
