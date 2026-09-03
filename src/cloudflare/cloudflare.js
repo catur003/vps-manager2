@@ -82,4 +82,19 @@ async function setUnderAttackMode(apexDomain, enabled) {
   });
 }
 
-module.exports = { findZoneId, purgeCache, setUnderAttackMode, getToken };
+/**
+ * Baca security_level SAAT INI (buat nampilin status ON/OFF Under Attack
+ * Mode di UI - sebelumnya tombol ON/OFF gak ada indikasi kondisi
+ * sebenarnya, gampang bikin bingung mana yang lagi aktif).
+ */
+async function getSecurityLevel(apexDomain) {
+  const token = getToken();
+  if (!token) return { ok: false, errorMessage: 'Cloudflare API Token belum diset di Settings.' };
+  const zoneResult = await findZoneId(apexDomain);
+  if (!zoneResult.ok) return zoneResult;
+  const result = await requestCloudflare('GET', `/zones/${zoneResult.zoneId}/settings/security_level`, token);
+  if (!result.ok) return result;
+  return { ok: true, value: result.result.value, underAttack: result.result.value === 'under_attack' };
+}
+
+module.exports = { findZoneId, purgeCache, setUnderAttackMode, getSecurityLevel, getToken };

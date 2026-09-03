@@ -161,6 +161,7 @@ const POLICY = {
   'project.rollback': { confirmRequired: true, auditLevel: 'write' },
   'project.webhookToggle': { confirmRequired: false, auditLevel: 'write' },
   'monitor.bandwidth': { confirmRequired: false, auditLevel: 'read' },
+  'cloudflare.securityLevel': { confirmRequired: false, auditLevel: 'read' },
   'cloudflare.purgeCache': { confirmRequired: false, auditLevel: 'write' },
   'cloudflare.underAttack': { confirmRequired: false, auditLevel: 'write' },
 

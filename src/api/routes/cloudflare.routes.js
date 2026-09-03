@@ -13,6 +13,18 @@ function guard(action, res) {
   return true;
 }
 
+router.get('/security-level', async (req, res) => {
+  const ACTION = 'cloudflare.securityLevel';
+  if (!guard(ACTION, res)) return;
+  const { domain } = req.query;
+  if (!domain || typeof domain !== 'string') {
+    return res.status(400).json({ success: false, message: 'domain wajib diisi.', code: 'INVALID_INPUT' });
+  }
+  const result = await cloudflare.getSecurityLevel(domain);
+  if (!result.ok) return res.status(400).json({ success: false, message: result.errorMessage, code: 'CF_SECURITY_LEVEL_FAILED' });
+  res.json({ success: true, message: 'OK', data: { value: result.value, underAttack: result.underAttack } });
+});
+
 router.post('/purge-cache', async (req, res) => {
   const ACTION = 'cloudflare.purgeCache';
   if (!guard(ACTION, res)) return;

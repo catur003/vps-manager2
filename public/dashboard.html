@@ -375,6 +375,7 @@
 
   <div class="nav-section-label">Settings</div>
   <div class="nav-item" data-page="webhooks" data-label="Notifikasi"><span class="nav-icon" style="color:#eab308"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span><span class="nav-label">Notifikasi</span></div>
+  <div class="nav-item" data-page="appsettings" data-label="App Settings"><span class="nav-icon" style="color:#94a3b8"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span class="nav-label">App Settings</span></div>
   <div class="nav-item" data-page="ai" data-label="AI Assistant"><span class="nav-icon" style="color:#d946ef"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="7" width="16" height="12" rx="2"/><path d="M12 3v4M9 12h.01M15 12h.01"/><path d="M8 19v2M16 19v2"/></svg></span><span class="nav-label">AI Assistant</span></div>
 
   <div class="sidebar-footer">
@@ -688,6 +689,69 @@
     <div id="fm-list"><div class="empty">Memuat...</div></div>
   </div>
 
+  <div class="page" id="page-appsettings">
+    <div class="topbar"><h1>App Settings</h1></div>
+    <p style="color:var(--ink-muted);font-size:12.5px;margin:-10px 0 16px">Pengaturan umum panel - SSL auto-renew, akun GitHub, auto-deploy webhook, integrasi Cloudflare. Buat setting notifikasi Discord/Telegram, lihat halaman Notifikasi.</p>
+
+    <div class="settings-card">
+      <div class="settings-card-head"><span class="sec-icon" style="color:#10b981"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"/></svg></span><h2>Auto-Renew SSL</h2></div>
+      <p class="settings-desc">Cek harian - perpanjang otomatis sertifikat yang mau expired dalam 30 hari.</p>
+      <div class="kv-row">
+        <span>Auto-renew sertifikat SSL</span>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="ssl-autorenew-toggle" onchange="toggleSslAutoRenew()" style="width:auto" />
+          <span id="ssl-autorenew-label">Off</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <div class="settings-card-head"><span class="sec-icon" style="color:#6366f1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="9" r="3"/><path d="M9 12v9M9 21h6M15 3v9a3 3 0 0 1-3 3"/></svg></span><h2>GitHub Accounts (repo PRIVATE)</h2></div>
+      <p class="settings-desc">Repo publik gak butuh ini. Untuk repo private, tambah akun di sini (Personal Access Token, bukan password) - dipilih lewat dropdown "Akun GitHub" saat Deploy Baru.</p>
+      <div class="deploy-form" style="margin-bottom:12px">
+        <div><label>Label (bebas, buat pengenal)</label><input id="gh-acc-label" placeholder="mis. akun-kerja" /></div>
+        <div><label>Username GitHub</label><input id="gh-acc-username" placeholder="mis. catur003" /></div>
+        <div class="full"><label>Personal Access Token</label><input id="gh-acc-token" type="password" placeholder="ghp_..." /></div>
+        <div class="full"><button onclick="addGithubAccount()">Tambah Akun</button></div>
+      </div>
+      <p style="font-size:11.5px;color:var(--ink-muted);margin:0 0 10px">Belum punya token? Buat di GitHub: Settings → Developer settings → Personal access tokens → Generate new token (scope minimal: <code>repo</code>).</p>
+      <div id="gh-accounts-list"></div>
+    </div>
+
+    <div class="settings-card">
+      <div class="settings-card-head"><span class="sec-icon" style="color:#f97316"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg></span><h2>Auto-Deploy Webhook (GitHub)</h2></div>
+      <p class="settings-desc">Secret global buat verifikasi signature webhook - aktivasi PER PROJECT tetap lewat tombol "Webhook" di halaman Deployments.</p>
+      <div class="deploy-form" style="margin-bottom:14px">
+        <div class="full">
+          <label>Webhook Secret</label>
+          <div style="display:flex;gap:8px">
+            <input id="webhook-secret-input" type="text" placeholder="klik Generate atau isi manual" style="flex:1" />
+            <button class="secondary" onclick="generateWebhookSecret()">Generate</button>
+            <button onclick="saveWebhookSecret()">Simpan</button>
+          </div>
+        </div>
+      </div>
+      <p style="color:var(--ink-muted);font-size:12.5px;margin:0 0 8px">
+        Isi Secret ini persis sama di GitHub repo (Settings → Webhooks → Add webhook, content type <code>application/json</code>, event: <code>push</code>). URL webhook per-project bisa dilihat lewat tombol "Webhook" di halaman Deployments.
+      </p>
+    </div>
+
+    <div class="settings-card" style="margin-bottom:0">
+      <div class="settings-card-head"><span class="sec-icon" style="color:#f38020"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l9 5v10l-9 5-9-5V7l9-5z"/></svg></span><h2>Cloudflare Integration</h2></div>
+      <p class="settings-desc">API Token dipakai buat fitur "Purge Cache" &amp; "Under Attack Mode" di halaman Domains / SSL. Buat token di Cloudflare dashboard → My Profile → API Tokens, scope: Zone → Cache Purge → Edit, Zone → Firewall Services → Edit.</p>
+      <div class="deploy-form">
+        <div class="full">
+          <label>Cloudflare API Token</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="cf-token-input" type="password" placeholder="paste token di sini" style="flex:1" />
+            <button onclick="saveCloudflareToken()">Simpan</button>
+          </div>
+          <p id="cf-token-status" style="font-size:11px;color:var(--ink-muted);margin:6px 0 0"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="page" id="page-ai">
     <div class="topbar"><h1>AI Assistant</h1><button class="secondary" onclick="aiToggleSettings()">⚙ Provider</button></div>
     <div id="ai-settings-box" hidden class="settings-card" style="flex-shrink:0">
@@ -909,6 +973,7 @@ const REFRESHERS = {
   backup: refreshBackups,
   security: refreshSecurity,
   webhooks: refreshNotifications,
+  appsettings: refreshAppSettings,
   tools: refreshTools,
   cron: refreshCron,
   diskcleanup: refreshDiskCleanup,
@@ -2568,6 +2633,16 @@ async function refreshBandwidth() {
   }
 }
 
+async function refreshAppSettings() {
+  try {
+    const cfg = await api('/config');
+    document.getElementById('ssl-autorenew-toggle').checked = Boolean(cfg.ssl_auto_renew);
+    document.getElementById('ssl-autorenew-label').textContent = cfg.ssl_auto_renew ? 'On' : 'Off';
+    document.getElementById('cf-token-status').textContent = cfg.hasCloudflareApiToken ? '✓ Token sudah diset.' : 'Belum diset.';
+  } catch (e) { toast('Gagal ambil config: ' + e.message, 'error'); }
+  refreshGithubAccounts();
+}
+
 async function refreshTools() {
   const grid = document.getElementById('tools-grid');
   try {
@@ -3259,9 +3334,9 @@ async function openNotificationSettingsModal() {
       <div class="modal" style="max-width:640px;max-height:85vh;overflow-y:auto">
         <h3 style="margin:0 0 14px">Notification Settings</h3>
 
-        <div class="settings-card">
-          <div class="settings-card-head"><span class="sec-icon" style="color:#eab308"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span><h2>Notifikasi Deploy</h2></div>
-          <p class="settings-desc">Dapat kabar Discord/Telegram tiap deploy selesai (berhasil atau gagal).</p>
+        <div class="settings-card" style="margin-bottom:0">
+          <div class="settings-card-head"><span class="sec-icon" style="color:#eab308"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span><h2>Notifikasi Discord / Telegram</h2></div>
+          <p class="settings-desc">Dapat kabar tiap deploy selesai (berhasil/gagal), backup gagal, disk hampir penuh, atau ada app yang crash-loop.</p>
           <div class="deploy-form">
             <div class="full"><label>Discord Webhook URL</label><input id="notif-discord" placeholder="https://discord.com/api/webhooks/..." /></div>
             <div><label>Telegram Bot Token</label><input id="notif-tg-token" placeholder="opsional" /></div>
@@ -3270,79 +3345,15 @@ async function openNotificationSettingsModal() {
           </div>
         </div>
 
-        <div class="settings-card">
-          <div class="settings-card-head"><span class="sec-icon" style="color:#10b981"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"/></svg></span><h2>Auto-Renew SSL</h2></div>
-          <p class="settings-desc">Cek harian - perpanjang otomatis sertifikat yang mau expired dalam 30 hari.</p>
-          <div class="kv-row">
-            <span>Auto-renew sertifikat SSL</span>
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-              <input type="checkbox" id="ssl-autorenew-toggle" onchange="toggleSslAutoRenew()" style="width:auto" />
-              <span id="ssl-autorenew-label">Off</span>
-            </label>
-          </div>
-        </div>
-
-        <div class="settings-card">
-          <div class="settings-card-head"><span class="sec-icon" style="color:#6366f1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="9" r="3"/><path d="M9 12v9M9 21h6M15 3v9a3 3 0 0 1-3 3"/></svg></span><h2>GitHub Accounts (repo PRIVATE)</h2></div>
-          <p class="settings-desc">Repo publik gak butuh ini. Untuk repo private, tambah akun di sini (Personal Access Token, bukan password) - dipilih lewat dropdown "Akun GitHub" saat Deploy Baru.</p>
-          <div class="deploy-form" style="margin-bottom:12px">
-            <div><label>Label (bebas, buat pengenal)</label><input id="gh-acc-label" placeholder="mis. akun-kerja" /></div>
-            <div><label>Username GitHub</label><input id="gh-acc-username" placeholder="mis. catur003" /></div>
-            <div class="full"><label>Personal Access Token</label><input id="gh-acc-token" type="password" placeholder="ghp_..." /></div>
-            <div class="full"><button onclick="addGithubAccount()">Tambah Akun</button></div>
-          </div>
-          <p style="font-size:11.5px;color:var(--ink-muted);margin:0 0 10px">Belum punya token? Buat di GitHub: Settings → Developer settings → Personal access tokens → Generate new token (scope minimal: <code>repo</code>).</p>
-          <div id="gh-accounts-list"></div>
-        </div>
-
-        <div class="settings-card" style="margin-bottom:0">
-          <div class="settings-card-head"><span class="sec-icon" style="color:#f97316"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg></span><h2>Auto-Deploy Webhook (GitHub)</h2></div>
-          <p class="settings-desc">Tiap ada <code>git push</code>, server otomatis pull+build+restart sendiri. Belum sempat setup? Tetap bisa trigger manual lewat tombol "Pull & Redeploy" di halaman Deployments.</p>
-          <div class="deploy-form" style="margin-bottom:14px">
-            <div class="full">
-              <label>Webhook Secret</label>
-              <div style="display:flex;gap:8px">
-                <input id="webhook-secret-input" type="text" placeholder="klik Generate atau isi manual" style="flex:1" />
-                <button class="secondary" onclick="generateWebhookSecret()">Generate</button>
-                <button onclick="saveWebhookSecret()">Simpan</button>
-              </div>
-            </div>
-          </div>
-          <p style="color:var(--ink-muted);font-size:12.5px;margin:0 0 8px">
-            Tambahkan URL & secret ini sebagai Webhook di GitHub repo (Settings → Webhooks → Add webhook, content type <code>application/json</code>, event: <code>push</code>, Secret: isi sama persis dengan di atas):
-          </p>
-          <pre class="logbox" id="webhook-url-box"></pre>
-        </div>
-
-        <div class="settings-card" style="margin-bottom:0;margin-top:14px">
-          <div class="settings-card-head"><span class="sec-icon" style="color:#f38020"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l9 5v10l-9 5-9-5V7l9-5z"/></svg></span><h2>Cloudflare Integration</h2></div>
-          <p class="settings-desc">API Token dipakai buat fitur "Purge Cache" &amp; "Under Attack Mode" di halaman Domains / SSL. Buat token di Cloudflare dashboard → My Profile → API Tokens, scope: Zone → Cache Purge → Edit, Zone → Firewall Services → Edit.</p>
-          <div class="deploy-form">
-            <div class="full">
-              <label>Cloudflare API Token</label>
-              <div style="display:flex;gap:8px;align-items:center">
-                <input id="cf-token-input" type="password" placeholder="paste token di sini" style="flex:1" />
-                <button onclick="saveCloudflareToken()">Simpan</button>
-              </div>
-              <p id="cf-token-status" style="font-size:11px;color:var(--ink-muted);margin:6px 0 0"></p>
-            </div>
-          </div>
-        </div>
-
         <div class="modal-actions"><button class="secondary" onclick="document.getElementById('modal-root').innerHTML=''">Tutup</button></div>
       </div>
     </div>
   `;
-  document.getElementById('webhook-url-box').textContent = `${API_BASE}/webhooks/github/<nama-project-di-registry>\n\nSecret (isi field "Secret" di GitHub, sama persis kayak yang di-generate di sini): lihat Configuration -> webhook_secret (belum ada UI-nya, generate manual dulu lewat config.json server kalau perlu).`;
   try {
     const cfg = await api('/config');
     document.getElementById('notif-discord').value = cfg.discord_webhook_url || '';
     document.getElementById('notif-tg-chat').value = cfg.telegram_chat_id || '';
-    document.getElementById('ssl-autorenew-toggle').checked = Boolean(cfg.ssl_auto_renew);
-    document.getElementById('ssl-autorenew-label').textContent = cfg.ssl_auto_renew ? 'On' : 'Off';
-    document.getElementById('cf-token-status').textContent = cfg.hasCloudflareApiToken ? '✓ Token sudah diset.' : 'Belum diset.';
   } catch (e) { toast('Gagal ambil config: ' + e.message, 'error'); }
-  refreshGithubAccounts();
 }
 async function refreshGithubAccounts() {
   const list = document.getElementById('gh-accounts-list');
@@ -3626,16 +3637,32 @@ async function refreshDomains() {
           <div class="kv-row"><span class="kv-label">Nginx</span><span class="badge ${d.nginx.exists ? 'ok' : 'bad'}">${d.nginx.exists ? 'ada' : 'tidak ada'}</span></div>
           <div class="kv-row"><span class="kv-label">SSL</span><span class="badge ${d.ssl.exists ? (d.ssl.expiringSoon ? 'warn' : 'ok') : 'bad'}">${d.ssl.exists ? (d.ssl.daysLeft + ' hari lagi') : 'belum ada'}</span></div>
           ${d.project ? `<div class="kv-row"><span class="kv-label">Project <b>${d.project.name}</b> <span style="color:var(--ink-muted)">:${d.project.port}</span></span><span class="badge ${d.project.alive ? 'ok' : 'bad'}">${d.project.alive ? 'alive' : 'down'}</span></div>` : ''}
+          <div class="kv-row"><span class="kv-label">Under Attack Mode</span><span class="badge" id="cf-status-${cssEscape(d.domain)}">mengecek...</span></div>
         </div>
         <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
           ${!d.ssl.exists && !d.isAlias ? `<button style="padding:6px 12px;font-size:12px" onclick="issueSslFor('${d.domain}', this)">🔒 Tambah SSL</button>` : ''}
           <button class="secondary" style="padding:6px 12px;font-size:12px" onclick="cfPurgeCache('${d.domain}')">Purge Cache</button>
-          <button class="secondary" style="padding:6px 12px;font-size:12px" onclick="cfToggleUnderAttack('${d.domain}', true)">🚨 Under Attack ON</button>
-          <button class="secondary" style="padding:6px 12px;font-size:12px" onclick="cfToggleUnderAttack('${d.domain}', false)">Under Attack OFF</button>
+          <button class="secondary" style="padding:6px 12px;font-size:12px" onclick="cfToggleUnderAttack('${d.domain}', true)">Aktifkan</button>
+          <button class="secondary" style="padding:6px 12px;font-size:12px" onclick="cfToggleUnderAttack('${d.domain}', false)">Nonaktifkan</button>
         </div>
       </div>
     `).join('');
+    domains.forEach((d) => refreshCfStatus(d.domain));
   } catch (e) { document.getElementById('domains-grid').innerHTML = `<div class="empty">Gagal: ${e.message}</div>`; }
+}
+function cssEscape(str) { return str.replace(/[^a-zA-Z0-9]/g, '_'); }
+async function refreshCfStatus(domain) {
+  const badge = document.getElementById(`cf-status-${cssEscape(domain)}`);
+  if (!badge) return;
+  try {
+    const { underAttack } = await api(`/cloudflare/security-level?domain=${encodeURIComponent(domain)}`);
+    badge.textContent = underAttack ? 'AKTIF' : 'Nonaktif';
+    badge.className = `badge ${underAttack ? 'warn' : 'ok'}`;
+  } catch (e) {
+    badge.textContent = 'N/A';
+    badge.title = e.message;
+    badge.className = 'badge';
+  }
 }
 async function cfPurgeCache(domain) {
   try {
@@ -3651,7 +3678,7 @@ function cfToggleUnderAttack(domain, enabled) {
       : 'Balikin security level ke normal (medium). Butuh Cloudflare API Token sudah diset di Settings.',
     confirmLabel: enabled ? 'Aktifkan' : 'Nonaktifkan',
     onConfirm: () => api('/cloudflare/under-attack', { method: 'POST', body: JSON.stringify({ domain, enabled }) })
-      .then(() => toast(`Under Attack Mode ${enabled ? 'aktif' : 'nonaktif'} untuk "${domain}".`, 'success'))
+      .then(() => { toast(`Under Attack Mode ${enabled ? 'aktif' : 'nonaktif'} untuk "${domain}".`, 'success'); refreshCfStatus(domain); })
       .catch((e) => toast('Gagal: ' + e.message, 'error')),
   });
 }
