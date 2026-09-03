@@ -28,6 +28,12 @@ const DEFAULT_CONFIG = {
   // (bukan token mentahnya) yang chmod 600 - config.json ini cuma nyimpen
   // PATH-nya, bukan token asli, biar gak ada 2 salinan token tersebar.
   cloudflare_credentials_path: null,
+  // User OS lain (di luar deploy_user & user yang punya project di registry)
+  // yang PM2-nya juga mau dipantau panel - buat app yang di-start manual di
+  // luar alur deploy tool ini (mis. proses lama yang udah jalan sebelum
+  // panel ada), BUKAN buat kasih akses baru apapun - cuma nambah scope
+  // `pm2 jlist` yang di-loop di pm2.js getRelevantUsers()/listApps().
+  additional_pm2_users: [],
   runtime_default: {
     node: '20.9.0',
     php: '8.2',

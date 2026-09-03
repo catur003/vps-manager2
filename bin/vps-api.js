@@ -3,6 +3,7 @@
 const { createServer } = require('../src/api/server');
 const config = require('../src/config/config');
 const logger = require('../src/utils/logger');
+const { attachTerminalServer } = require('../src/api/terminal');
 
 const cfg = config.loadConfig();
 const port = (cfg.api && cfg.api.port) || 4001;
@@ -18,7 +19,8 @@ const app = createServer();
 // internet. Akses dari luar (bot Telegram/mobile/web GUI) wajib lewat
 // Nginx reverse proxy + SSL (pakai nginx.js/ssl.js yang udah ada), bukan
 // nembak port ini langsung.
-app.listen(port, '127.0.0.1', () => {
+const httpServer = app.listen(port, '127.0.0.1', () => {
   logger.success(`VPS Manager API jalan di http://127.0.0.1:${port} (localhost only)`);
   logger.info('Buat diakses dari luar: pasang reverse proxy + SSL lewat Nginx Manager, JANGAN expose port ini langsung.');
 });
+attachTerminalServer(httpServer);

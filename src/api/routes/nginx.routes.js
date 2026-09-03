@@ -90,6 +90,33 @@ router.get('/sites/:file', (req, res) => {
 });
 
 /**
+ * Edit RAW config site yang SUDAH ADA - backup otomatis dulu, ditulis lewat
+ * writeConfFile() yang test syntax + rollback otomatis kalau invalid (site
+ * TIDAK PERNAH kepasang dalam kondisi rusak, nginx TIDAK PERNAH direload
+ * dengan config yang gagal test).
+ */
+router.put('/sites/:file', (req, res) => {
+  const ACTION = 'nginx.editSite';
+  if (!guard(ACTION, res)) return;
+  const site = resolveSiteFile(req.params.file, res);
+  if (!site) return;
+  const { content } = req.body || {};
+  if (typeof content !== 'string' || !content.trim()) {
+    return res.status(400).json({ success: false, message: 'content wajib diisi.', code: 'INVALID_INPUT' });
+  }
+
+  const startedAt = Date.now();
+  const auditId = audit.recordStart({ action: ACTION, ip: req.ip, params: { file: site.file } });
+  const result = nginx.editSite(site.file, content);
+  audit.recordEnd(auditId, { success: result.ok, message: result.errorMessage || 'OK', durationMs: Date.now() - startedAt });
+
+  if (!result.ok) {
+    return res.status(400).json({ success: false, message: result.errorMessage, code: 'NGINX_EDIT_FAILED' });
+  }
+  res.json({ success: true, message: `Site "${site.file}" berhasil diupdate & nginx sudah di-reload.` });
+});
+
+/**
  * Error log nginx per-domain (baca file {nginx_log_dir}/{domain}.error.log,
  * konvensi aaPanel - lihat logviewer.getNginxErrorLog). Read-only. `lines`
  * lewat query string, dibatasi 1-1000 sama pola dengan pm2.routes.js.

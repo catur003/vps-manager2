@@ -38,6 +38,10 @@ router.get('/projects', (req, res) => {
     name: p.name,
     deploy_user: p.deploy_user || config.loadConfig().deploy_user,
     node_version: p.node_version || null,
+    domain: p.domain || null,
+    aliases: p.aliases || [],
+    port: p.port || null,
+    folder_path: p.folder_path || null,
   }));
   res.json({ success: true, message: 'OK', data: projects });
 });
@@ -48,6 +52,22 @@ router.get('/versions', (req, res) => {
   const user = resolveUser(req);
   const result = node.listInstalled(user);
   res.json({ success: true, message: result.ok ? 'OK' : result.errorMessage, data: { user, ...result } });
+});
+
+/** GET /node/global-info?user=... - npm version aktif + daftar global packages (real, buat kartu ringkasan). */
+router.get('/global-info', (req, res) => {
+  if (!guard('node.list', res)) return;
+  const user = resolveUser(req);
+  const result = node.getGlobalInfo(user);
+  res.json({ success: true, message: 'OK', data: { user, ...result } });
+});
+
+/** GET /node/versions/available?user=... - daftar versi yang bisa diinstall (buat dropdown, bukan ngetik manual). */
+router.get('/versions/available', (req, res) => {
+  if (!guard('node.list', res)) return;
+  const user = resolveUser(req);
+  const result = node.listAvailableVersions(user);
+  res.json({ success: result.ok, message: result.ok ? 'OK' : result.errorMessage, data: { user, versions: result.versions } });
 });
 
 /** POST /node/versions/install { version, user? } - install versi baru (auto-install nvm dulu kalau belum ada). */

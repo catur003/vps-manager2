@@ -105,7 +105,58 @@ function listInstalled(user) {
     });
   }
 
-  return { ok: true, nvmInstalled: true, versions, defaultVersion, currentVersion };
+  // Per-versi: npm version (baca langsung dari folder bin versi itu, TANPA
+  // perlu `nvm use` - jadi gak nge-switch versi aktif cuma buat nge-cek) +
+  // tanggal instalasi (mtime folder versi - proxy real, bukan field metadata
+  // resmi nvm karena nvm sendiri gak nyimpen tanggal install).
+  const versionDetails = versions.map((v) => {
+    const npmPath = `$NVM_DIR/versions/node/${v}/bin/npm`;
+    const npmVerResult = shell.runAsUser(user, withNvm(`[ -x "${npmPath}" ] && "${npmPath}" -v`), { silent: true });
+    const mtimeResult = shell.runAsUser(user, `stat -c %y "$HOME/.nvm/versions/node/${v}" 2>/dev/null`, { silent: true });
+    return {
+      version: v,
+      npmVersion: npmVerResult.ok ? npmVerResult.output.trim() : null,
+      installedAt: mtimeResult.ok ? mtimeResult.output.trim().slice(0, 16) : null,
+    };
+  });
+
+  return { ok: true, nvmInstalled: true, versions, versionDetails, defaultVersion, currentVersion };
+}
+
+/**
+ * Info tambahan buat kartu ringkasan Node Manager - global packages (`npm
+ * list -g`) dan versi npm yang lagi aktif. Semua REAL (dihitung langsung),
+ * bukan angka statis.
+ */
+function getGlobalInfo(user) {
+  const npmVerResult = shell.runAsUser(user, 'npm -v', { silent: true });
+  const listResult = shell.runAsUser(user, 'npm list -g --depth=0 --json 2>/dev/null', { silent: true });
+  let packages = [];
+  if (listResult.ok) {
+    try {
+      const parsed = JSON.parse(listResult.output);
+      packages = Object.entries(parsed.dependencies || {}).map(([name, info]) => ({ name, version: info.version }));
+    } catch { /* npm kadang nyelipin warning non-JSON ke stdout - biarin packages kosong drpd crash */ }
+  }
+
+  const nodePathResult = shell.runAsUser(user, 'which node', { silent: true });
+  const npmPathResult = shell.runAsUser(user, 'which npm', { silent: true });
+  const globalPathResult = shell.runAsUser(user, 'npm root -g', { silent: true });
+  const shellResult = shell.runArgs('getent', ['passwd', user], { silent: true });
+  const shellPath = shellResult.ok ? (shellResult.output.split(':')[6] || null) : null;
+
+  return {
+    ok: true,
+    npmVersion: npmVerResult.ok ? npmVerResult.output.trim() : null,
+    packages,
+    platform: process.platform,
+    arch: process.arch,
+    nodePath: nodePathResult.ok ? nodePathResult.output.trim() : null,
+    npmPath: npmPathResult.ok ? npmPathResult.output.trim() : null,
+    globalPath: globalPathResult.ok ? globalPathResult.output.trim() : null,
+    user,
+    shell: shellPath,
+  };
 }
 
 /**
@@ -117,6 +168,34 @@ function listInstalled(user) {
  */
 function isValidVersionInput(version) {
   return /^v?\d+(\.\d+){0,2}$/.test(version) || /^(lts\/[\w.*-]+|node|stable)$/.test(version);
+}
+
+/**
+ * Daftar versi yang BOLEH diinstall - dipanggil buat isi dropdown "Install
+ * versi baru" (sebelumnya user WAJIB ngetik manual versi persis, gampang
+ * typo/gak tau versi apa aja yang valid). `nvm ls-remote --lts` query
+ * REAL ke release index Node.js (bukan hardcode daftar statis yang bisa
+ * basi), diringkas ke versi LTS MAYOR terbaru tiap baris "vX.Y.Z" biar
+ * dropdown-nya gak isinya ratusan patch version.
+ */
+function listAvailableVersions(user) {
+  if (!isNvmInstalled(user)) {
+    const installResult = installNvm(user);
+    if (!installResult.ok) return { ok: false, errorMessage: installResult.errorMessage, versions: [] };
+  }
+  const result = shell.runAsUser(user, withNvm('nvm ls-remote --lts --no-colors'), { timeoutMs: 30000, silent: true });
+  if (!result.ok) return { ok: false, errorMessage: result.errorMessage, versions: [] };
+
+  const lines = result.output.split('\n').filter((l) => /^\s*v\d+\.\d+\.\d+/.test(l));
+  const latestPerMajor = new Map();
+  for (const line of lines) {
+    const match = line.match(/v(\d+)\.(\d+)\.(\d+)/);
+    if (!match) continue;
+    const [full, major] = [match[0], match[1]];
+    latestPerMajor.set(major, full); // list-nya urut lama->baru, jadi entry TERAKHIR per major = versi terbaru
+  }
+  const versions = [...latestPerMajor.values()].reverse(); // major terbaru duluan
+  return { ok: true, versions: ['lts/*', 'node', ...versions] };
 }
 
 function installVersion(user, version) {
@@ -220,6 +299,8 @@ module.exports = {
   isNvmInstalled,
   installNvm,
   listInstalled,
+  listAvailableVersions,
+  getGlobalInfo,
   installVersion,
   uninstallVersion,
   setDefault,

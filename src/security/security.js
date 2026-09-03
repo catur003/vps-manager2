@@ -6,10 +6,33 @@ const shell = require('../utils/shell');
 // TANPA shell/pipe) demi konsistensi & defense-in-depth di seluruh codebase,
 // bukan karena ada celah injection nyata di sini.
 
+/**
+ * Parse output `ufw status` (plain, bukan `numbered`) jadi rule terstruktur
+ * - dipakai UI biar nampilin daftar port kayak tabel (badge ALLOW + nama
+ * port), BUKAN nge-dump teks mentah ala terminal.
+ */
+function parseUfwRules(output) {
+  const lines = output.split('\n').slice(3); // buang "Status: active", baris kosong, header "To/Action/From"
+  const rules = [];
+  const seen = new Set();
+  for (const line of lines) {
+    const match = line.match(/^(\d+(?:\/\w+)?)(?:\s*\(v6\))?\s+(ALLOW|DENY|LIMIT|REJECT)(?:\s+IN)?\s+(.+?)\s*$/);
+    if (!match) continue;
+    const [, portProto, action] = match;
+    const [port, proto] = portProto.split('/');
+    const key = `${port}|${proto || ''}|${action}`;
+    if (seen.has(key)) continue; // v4+v6 duplikat baris - digabung jadi 1 entry
+    seen.add(key);
+    rules.push({ port, proto: proto || '-', action });
+  }
+  return rules;
+}
+
 function checkFirewall() {
   const ufwResult = shell.runArgs('sudo', ['ufw', 'status'], { silent: true });
   if (ufwResult.ok && ufwResult.output && !ufwResult.output.includes('command not found')) {
-    return { ok: true, tool: 'ufw', output: ufwResult.output };
+    const active = /^Status:\s*active/im.test(ufwResult.output);
+    return { ok: true, tool: 'ufw', output: ufwResult.output, active, rules: active ? parseUfwRules(ufwResult.output) : [] };
   }
   const firewalldResult = shell.runArgs('sudo', ['firewall-cmd', '--state'], { silent: true });
   if (firewalldResult.ok) {
@@ -107,10 +130,31 @@ function listOpenPorts() {
  * terinstall. Sekarang dibedakan lewat isi stderr, sama seperti pola di
  * doctor.js checkSudoAccess().
  */
+/**
+ * Detail per-jail (`fail2ban-client status <jail>`) - jail list dari
+ * checkFail2ban() cuma nama doang, ini yang ngasih angka beneran (Currently
+ * banned/Total banned/Banned IP list) buat ditampilin sebagai kartu,
+ * BUKAN nge-dump teks mentah `fail2ban-client status` ala terminal.
+ */
+function getFail2banJailDetail(jailName) {
+  const result = shell.runArgs('sudo', ['fail2ban-client', 'status', jailName], { silent: true });
+  if (!result.ok) return null;
+
+  const currentlyBanned = parseInt((result.output.match(/Currently banned:\s*(\d+)/) || [])[1] || '0', 10);
+  const totalBanned = parseInt((result.output.match(/Total banned:\s*(\d+)/) || [])[1] || '0', 10);
+  const bannedIpLine = (result.output.match(/Banned IP list:\s*(.*)/) || [])[1] || '';
+  const bannedIps = bannedIpLine.split(/\s+/).filter(Boolean);
+
+  return { jail: jailName, currentlyBanned, totalBanned, bannedIps };
+}
+
 function checkFail2ban() {
   const result = shell.runArgs('sudo', ['fail2ban-client', 'status'], { silent: true });
   if (result.ok) {
-    return { ok: true, installed: true, output: result.output };
+    const jailMatch = result.output.match(/Jail list:\s*(.*)/i);
+    const jails = jailMatch ? jailMatch[1].split(',').map((s) => s.trim()).filter(Boolean) : [];
+    const jailDetails = jails.map(getFail2banJailDetail).filter(Boolean);
+    return { ok: true, installed: true, output: result.output, jails: jailDetails };
   }
 
   const stderrText = (result.errorMessage || '').trim();
@@ -142,8 +186,21 @@ function checkFail2ban() {
  */
 function checkSshConfig() {
   const result = shell.runArgs('sudo', ['grep', '-E', '^(PermitRootLogin|PasswordAuthentication|Port)\\s', '/etc/ssh/sshd_config'], { silent: true });
-  if (!result.ok || !result.output) {
-    return { ok: false, errorMessage: 'Gagal membaca /etc/ssh/sshd_config atau setting masih default (tidak eksplisit di-set).' };
+
+  // grep exit code 1 = "tidak ada baris yang cocok", BUKAN error - ini kondisi
+  // valid kalau setting-nya masih default (dikomentari/tidak di-set eksplisit
+  // di sshd_config). Cuma exit code lain (mis. 2 = sudo/file gagal dibaca)
+  // yang benar-benar berarti gagal baca.
+  if (!result.ok && result.exitCode === 1) {
+    return {
+      ok: true,
+      settings: {},
+      usingDefaults: true,
+      note: 'PermitRootLogin/PasswordAuthentication/Port tidak di-set eksplisit di sshd_config - OpenSSH pakai default bawaan (PermitRootLogin prohibit-password, PasswordAuthentication yes, Port 22).',
+    };
+  }
+  if (!result.ok) {
+    return { ok: false, errorMessage: result.errorMessage || 'Gagal membaca /etc/ssh/sshd_config.' };
   }
 
   const settings = {};
@@ -152,7 +209,46 @@ function checkSshConfig() {
     if (key) settings[key] = value;
   });
 
-  return { ok: true, settings };
+  return { ok: true, settings, usingDefaults: false };
 }
 
-module.exports = { checkFirewall, listOpenPorts, checkFail2ban, checkSshConfig };
+/**
+ * Percobaan login SSH terakhir (real, dari /var/log/auth.log) - dipakai
+ * kartu "Recent Login Attempts" biar bukan cuma "SSH aman/gak" abstrak,
+ * tapi keliatan beneran ada yang nyoba brute-force apa nggak. `tail` dulu
+ * (bukan baca seluruh file - auth.log bisa berjam-jam nyimpen log & besar)
+ * baru di-grep pola Accepted/Failed di JS.
+ */
+function getRecentSshAttempts(limit = 10) {
+  // grep LANGSUNG ke seluruh file (bukan `tail -n <fixed>` terus baru
+  // di-grep) - auth.log di server yang lagi rame (banyak bot-scan SSH +
+  // aktivitas sudo lain) bisa gampang "ngeliwatin" baris sshd relevan
+  // kalau cuma ambil N baris terakhir mentah-mentah, ketauan pas testing:
+  // tail -n 2000 kadang 0 hasil walau beneran ada attempt gak lama ini.
+  const result = shell.runArgs('sudo', ['grep', '-E', 'sshd\\[[0-9]+\\]: (Accepted|Failed password)', '/var/log/auth.log'], { silent: true, maxBuffer: 5 * 1024 * 1024 });
+  if (!result.ok) {
+    // grep exit 1 = "gak ada baris cocok" (bukan error beneran) - lihat pola sama di checkSshConfig().
+    if (result.exitCode === 1) return { ok: true, attempts: [] };
+    return { ok: false, errorMessage: result.errorMessage, attempts: [] };
+  }
+
+  // Ubuntu 24.04 (rsyslog modern) nulis timestamp ISO 8601 di awal baris
+  // (mis. "2026-09-02T12:40:49.557408+00:00 host sshd[...]: ..."), BUKAN
+  // format syslog klasik "Mon DD HH:MM:SS" - regex timestamp WAJIB match
+  // yang ini, kalau nggak semua baris auth.log gagal ke-parse diam-diam.
+  const attempts = [];
+  for (const line of result.output.split('\n')) {
+    let match = line.match(/^(\S+)\s+\S+\s+sshd\[\d+\]:\s+Accepted (\w+) for (\S+) from (\S+)/);
+    if (match) {
+      attempts.push({ at: match[1], success: true, method: match[2], user: match[3], ip: match[4] });
+      continue;
+    }
+    match = line.match(/^(\S+)\s+\S+\s+sshd\[\d+\]:\s+Failed password for (?:invalid user )?(\S+) from (\S+)/);
+    if (match) {
+      attempts.push({ at: match[1], success: false, user: match[2], ip: match[3] });
+    }
+  }
+  return { ok: true, attempts: attempts.slice(-limit).reverse() };
+}
+
+module.exports = { checkFirewall, listOpenPorts, checkFail2ban, checkSshConfig, getRecentSshAttempts };

@@ -95,7 +95,7 @@ router.get('/', (req, res) => {
   }
 
   audit.recordEnd(auditId, { success: true, message: 'OK', durationMs: Date.now() - startedAt });
-  res.json({ success: true, message: 'OK', data: { databases: result.databases } });
+  res.json({ success: true, message: 'OK', data: { databases: result.databases, serverVersion: database.getServerVersion() } });
 });
 
 /**

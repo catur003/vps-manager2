@@ -1976,7 +1976,7 @@ async function databaseManagerMenu() {
     } else if (databases.length === 0) {
       logger.warn('Belum ada database custom.');
     } else {
-      databases.forEach((db) => logger.card(`🗄️  ${db}`, [], { color: 'cyan' }));
+      databases.forEach((db) => logger.card(`🗄️  ${db.name} (${db.tableCount} tabel)`, [], { color: 'cyan' }));
     }
     await afterAction(databaseManagerMenu);
     return;
@@ -2057,7 +2057,7 @@ async function databaseManagerMenu() {
       return;
     }
     const known = dbRegistry.listEntries().map((e) => e.dbName);
-    const importable = databases.filter((d) => !known.includes(d));
+    const importable = databases.map((d) => d.name).filter((d) => !known.includes(d));
     if (importable.length === 0) {
       logger.warn('Semua database yang ada sudah tercatat.');
       await afterAction(databaseManagerMenu);
@@ -2121,7 +2121,7 @@ async function databaseManagerMenu() {
         type: 'list',
         name: 'targetDb',
         message: 'Import SQL ke database mana?',
-        choices: [...allDbs, { name: '↩️  Kembali', value: '__back__' }],
+        choices: [...allDbs.map((d) => d.name), { name: '↩️  Kembali', value: '__back__' }],
       },
     ]);
     if (targetDb === '__back__') {
@@ -2235,7 +2235,7 @@ async function databaseManagerMenu() {
         type: 'list',
         name: 'dbName',
         message: 'Pilih database yang mau di-reset password-nya:',
-        choices: [...allDbsForReset, { name: '↩️  Kembali', value: '__back__' }],
+        choices: [...allDbsForReset.map((d) => d.name), { name: '↩️  Kembali', value: '__back__' }],
       },
     ]);
     if (dbName === '__back__') {
@@ -2336,7 +2336,7 @@ async function databaseManagerMenu() {
         type: 'list',
         name: 'dbName',
         message: 'Pilih database yang mau dihapus:',
-        choices: [...databases, { name: '↩️  Kembali', value: '__back__' }],
+        choices: [...databases.map((db) => db.name), { name: '↩️  Kembali', value: '__back__' }],
       },
     ]);
     if (dbName === '__back__') {
@@ -2412,7 +2412,7 @@ async function browseDatabaseMenu() {
   }
 
   const dbName = await customMenu.showMenu('🔍 Browse Database - Pilih Database', [
-    ...databases.map((db) => ({ key: db, label: `🗄️  ${db}` })),
+    ...databases.map((db) => ({ key: db.name, label: `🗄️  ${db.name}` })),
     { key: 'back', label: '↩️  Kembali' },
   ]);
 
@@ -2737,7 +2737,7 @@ async function backupManagerMenu() {
       return;
     }
     const { dbName } = await inquirer.prompt([
-      { type: 'list', name: 'dbName', message: 'Pilih database:', choices: databases },
+      { type: 'list', name: 'dbName', message: 'Pilih database:', choices: databases.map((d) => d.name) },
     ]);
     logger.info(`Backup database "${dbName}"...`);
     const result = backup.backupDatabase(dbName);
@@ -2747,11 +2747,11 @@ async function backupManagerMenu() {
     if (backups.length === 0) {
       logger.warn('Belum ada backup.');
     } else {
-      backups.forEach((f) => logger.card(`${f.startsWith('db-') ? '🗄️ ' : '📦'} ${f}`, [], { color: f.startsWith('db-') ? 'blue' : 'green' }));
+      backups.forEach((b) => logger.card(`${b.filename.startsWith('db-') ? '🗄️ ' : '📦'} ${b.filename} (${b.size}, ${b.createdAt})`, [], { color: b.filename.startsWith('db-') ? 'blue' : 'green' }));
     }
   } else if (action === 'restore-project') {
     const { backups } = backup.listBackups();
-    const projectBackups = backups.filter((f) => f.startsWith('project-'));
+    const projectBackups = backups.filter((b) => b.filename.startsWith('project-'));
     if (projectBackups.length === 0) {
       logger.warn('Belum ada backup project.');
       await afterAction(backupManagerMenu);
@@ -2759,7 +2759,7 @@ async function backupManagerMenu() {
     }
     const cfgForRestore = config.loadConfig();
     const { file, targetParentDir, deployUser } = await inquirer.prompt([
-      { type: 'list', name: 'file', message: 'Pilih backup:', choices: projectBackups },
+      { type: 'list', name: 'file', message: 'Pilih backup:', choices: projectBackups.map((b) => ({ name: `${b.filename} (${b.size}, ${b.createdAt})`, value: b.filename })) },
       { type: 'input', name: 'targetParentDir', message: 'Restore ke folder induk mana (contoh: /www/wwwroot):' },
       { type: 'input', name: 'deployUser', message: 'Deploy user (owner file hasil restore):', default: cfgForRestore.deploy_user },
     ]);
@@ -2803,7 +2803,7 @@ async function backupManagerMenu() {
     }
   } else if (action === 'restore-db') {
     const { backups } = backup.listBackups();
-    const dbBackups = backups.filter((f) => f.startsWith('db-'));
+    const dbBackups = backups.filter((b) => b.filename.startsWith('db-'));
     if (dbBackups.length === 0) {
       logger.warn('Belum ada backup database.');
       await afterAction(backupManagerMenu);
@@ -2816,7 +2816,7 @@ async function backupManagerMenu() {
         type: 'list',
         name: 'file',
         message: 'Pilih file backup database:',
-        choices: [...dbBackups, { name: '↩️  Kembali', value: '__back__' }],
+        choices: [...dbBackups.map((b) => ({ name: `${b.filename} (${b.size}, ${b.createdAt})`, value: b.filename })), { name: '↩️  Kembali', value: '__back__' }],
       },
     ]);
     if (file === '__back__') {
@@ -2836,7 +2836,7 @@ async function backupManagerMenu() {
         type: 'list',
         name: 'dbName',
         message: 'Restore ke database mana?',
-        choices: [...allDbs, { name: '↩️  Kembali', value: '__back__' }],
+        choices: [...allDbs.map((d) => d.name), { name: '↩️  Kembali', value: '__back__' }],
       },
     ]);
     if (dbName === '__back__') {
@@ -2872,7 +2872,7 @@ async function backupManagerMenu() {
       return;
     }
     const { file } = await inquirer.prompt([
-      { type: 'list', name: 'file', message: 'Pilih backup yang mau dihapus:', choices: backups },
+      { type: 'list', name: 'file', message: 'Pilih backup yang mau dihapus:', choices: backups.map((b) => ({ name: `${b.filename} (${b.size}, ${b.createdAt})`, value: b.filename })) },
     ]);
     const { confirm } = await inquirer.prompt([
       { type: 'confirm', name: 'confirm', message: `Yakin hapus "${file}"?`, default: false },

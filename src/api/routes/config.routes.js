@@ -1,5 +1,7 @@
 const express = require('express');
 const config = require('../../config/config');
+const database = require('../../database/database');
+const notify = require('../../notify/notify');
 const audit = require('../audit');
 const commandPolicy = require('../commandPolicy');
 
@@ -23,6 +25,16 @@ const EDITABLE_FIELDS = [
   'backup_dir',
   'backup_retention_days',
   'nginx_log_dir',
+  'discord_webhook_url',
+  'telegram_bot_token',
+  'telegram_chat_id',
+  'ssl_auto_renew',
+  'webhook_secret',
+  'ai_base_url',
+  'ai_api_key',
+  'ai_model',
+  'ai_model_filter',
+  'additional_pm2_users',
 ];
 
 function guard(action, res) {
@@ -39,10 +51,21 @@ function guard(action, res) {
  * prinsipnya kayak `api.key_hash` yang emang dari awal gak pernah dibalikin.
  */
 function maskConfig(cfg) {
-  const { db_root_password: dbPassword, api, github_accounts: githubAccounts, ...rest } = cfg;
+  const {
+    db_root_password: dbPassword,
+    telegram_bot_token: telegramBotToken,
+    webhook_secret: webhookSecret,
+    ai_api_key: aiApiKey,
+    api,
+    github_accounts: githubAccounts,
+    ...rest
+  } = cfg;
   return {
     ...rest,
     hasDbPassword: Boolean(dbPassword),
+    hasTelegramBotToken: Boolean(telegramBotToken),
+    hasWebhookSecret: Boolean(webhookSecret),
+    hasAiApiKey: Boolean(aiApiKey),
     api: { port: api?.port },
     githubAccountsCount: (githubAccounts || []).length,
   };
@@ -99,6 +122,24 @@ router.put('/', (req, res) => {
   const auditId = audit.recordStart({ action: ACTION, ip: req.ip, params: auditParams });
 
   const cfg = config.loadConfig();
+
+  // db_root_password diganti DUA-DUANYA sekaligus: config.json DAN MariaDB
+  // nyata (via ALTER USER, autentikasi pakai password LAMA dari cfg saat
+  // ini). Ini nyegah desync yang pernah kejadian - config.json nyimpen
+  // password yang gak match kenyataan di server, jadi semua fitur database
+  // di panel gagal konek walau kelihatannya "udah disimpan".
+  if ('db_root_password' in updates) {
+    const dbResult = database.changeRootPassword(updates.db_root_password);
+    if (!dbResult.ok) {
+      audit.recordEnd(auditId, { success: false, message: dbResult.errorMessage, durationMs: Date.now() - startedAt });
+      return res.status(400).json({
+        success: false,
+        message: `Gagal ganti password di MariaDB (config TIDAK disimpan, biar gak desync): ${dbResult.errorMessage}`,
+        code: 'DB_PASSWORD_CHANGE_FAILED',
+      });
+    }
+  }
+
   const merged = { ...cfg, ...updates };
   config.saveConfig(merged);
 
@@ -173,6 +214,33 @@ router.delete('/github/:label', (req, res) => {
   audit.recordEnd(auditId, { success: true, message: 'OK', durationMs: Date.now() - startedAt });
 
   res.json({ success: true, message: `Akun "${label}" dihapus.` });
+});
+
+/**
+ * POST /config/test-notify - kirim pesan test ke channel Discord/Telegram
+ * yang lagi dikonfigurasi. Read-only terhadap sistem (gak ubah apa-apa),
+ * cuma buat verifikasi kredensial notif bener sebelum dipakai beneran.
+ */
+router.post('/test-notify', async (req, res) => {
+  const ACTION = 'config.testNotify';
+  if (!guard(ACTION, res)) return;
+
+  const cfg = config.loadConfig();
+  if (!cfg.discord_webhook_url && !(cfg.telegram_bot_token && cfg.telegram_chat_id)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Belum ada Discord webhook atau Telegram bot/chat yang dikonfigurasi.',
+      code: 'NO_NOTIFY_CHANNEL',
+    });
+  }
+
+  const results = await notify.notify('🔔 Test notifikasi dari vps-manager dashboard — kalau kamu lihat ini, konfigurasinya berhasil!');
+  const anyOk = results.some((r) => r.ok);
+  res.json({
+    success: anyOk,
+    message: anyOk ? 'Test notifikasi terkirim.' : 'Gagal kirim ke semua channel yang dikonfigurasi.',
+    data: { results },
+  });
 });
 
 module.exports = router;

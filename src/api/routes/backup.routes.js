@@ -40,7 +40,7 @@ function resolveBackupFile(filename, res) {
     return null;
   }
   const listResult = backup.listBackups();
-  if (!listResult.backups.includes(filename)) {
+  if (!listResult.backups.some((b) => b.filename === filename)) {
     res.status(404).json({ success: false, message: `File backup "${filename}" tidak ditemukan.`, code: 'BACKUP_NOT_FOUND' });
     return null;
   }

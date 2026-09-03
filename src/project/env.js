@@ -7,10 +7,20 @@ const shell = require('../utils/shell');
  * "View .env" / "Edit .env"), dipindah ke sini supaya reusable dari
  * CLI/bot/web nanti.
  */
+/**
+ * FIX: sebelumnya pakai `cat ".../.env" 2>/dev/null` doang - `2>/dev/null`
+ * cuma nge-buang PESAN error, exit code `cat` tetap non-zero kalau file-nya
+ * gak ada. Project yang emang belum pernah dikasih .env (valid, bukan error -
+ * mis. semua config di-hardcode atau baru pertama kali di-deploy) jadi selalu
+ * dilaporkan "Gagal membaca .env project" walau sebenarnya cuma belum ada
+ * filenya. Sekarang dicek eksplisit: kalau file gak ada, balikin string
+ * kosong (ok:true) - user bisa langsung mulai isi dari kosong, bukan
+ * ke-block sama pesan gagal yang salah diagnosis.
+ */
 function readEnv(projectPath, deployUser) {
   const result = shell.runAsUser(
     deployUser,
-    `cat "${projectPath}/.env" 2>/dev/null`,
+    `if [ -f "${projectPath}/.env" ]; then cat "${projectPath}/.env"; else echo -n ""; fi`,
     { silent: true }
   );
   return { ok: result.ok, content: result.output || '' };

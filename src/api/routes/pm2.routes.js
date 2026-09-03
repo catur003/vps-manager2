@@ -123,6 +123,58 @@ router.get('/:name/logs', (req, res) => {
 });
 
 /**
+ * Environment variable yang BENERAN aktif di proses (beda dari isi file
+ * .env - lihat catatan di pm2.js getEnv()). Read-only.
+ */
+router.get('/:name/env', (req, res) => {
+  const ACTION = 'pm2.getEnv';
+  if (!guard(ACTION, res)) return;
+  const owner = requireValidName(req, res);
+  if (!owner) return;
+  const { name } = req.params;
+
+  const startedAt = Date.now();
+  const auditId = audit.recordStart({ action: ACTION, ip: req.ip, params: { name } });
+
+  const result = pm2.getEnv(name, owner);
+  audit.recordEnd(auditId, { success: result.ok, message: result.errorMessage || 'OK', durationMs: Date.now() - startedAt });
+
+  if (!result.ok) {
+    return res.status(400).json({ success: false, message: result.errorMessage, code: 'PM2_GET_ENV_FAILED' });
+  }
+  res.json({ success: true, message: 'OK', data: { name, owner, env: result.env } });
+});
+
+/**
+ * Set/ubah batas RAM per-app (`--max-memory-restart`). PM2 otomatis restart
+ * app itu sendiri kalau lewat batas ini - bukan resource limit level OS
+ * (cgroups) kayak Docker, tapi cukup buat nyegah 1 app "makan RAM sampai
+ * abis" ganggu app lain di VPS yang sama.
+ */
+router.post('/:name/memory-limit', (req, res) => {
+  const ACTION = 'pm2.setMemoryLimit';
+  if (!guard(ACTION, res)) return;
+  const owner = requireValidName(req, res);
+  if (!owner) return;
+  const { name } = req.params;
+  const { limit } = req.body || {};
+  if (!limit || typeof limit !== 'string') {
+    return res.status(400).json({ success: false, message: 'limit wajib diisi (mis. "300M", "1G").', code: 'INVALID_INPUT' });
+  }
+
+  const startedAt = Date.now();
+  const auditId = audit.recordStart({ action: ACTION, ip: req.ip, params: { name, limit } });
+
+  const result = pm2.setMemoryLimit(name, owner, limit);
+  audit.recordEnd(auditId, { success: result.ok, message: result.errorMessage || 'OK', durationMs: Date.now() - startedAt });
+
+  if (!result.ok) {
+    return res.status(400).json({ success: false, message: result.errorMessage, code: 'PM2_SET_MEMORY_LIMIT_FAILED' });
+  }
+  res.json({ success: true, message: `Batas RAM "${name}" diset ke ${limit}.` });
+});
+
+/**
  * Start app. Kalau belum pernah start sama sekali, pm2.start() otomatis
  * fallback ke full command pakai data registry (path & port) - lihat
  * komentar di pm2.js.

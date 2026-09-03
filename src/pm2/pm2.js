@@ -38,8 +38,10 @@ function nodePathPrefix(project) {
  */
 function getRelevantUsers() {
   const projects = registry.listProjects();
+  const cfg = config.loadConfig();
   const users = new Set(projects.map((p) => p.deploy_user).filter(Boolean));
-  users.add(config.loadConfig().deploy_user);
+  users.add(cfg.deploy_user);
+  (cfg.additional_pm2_users || []).forEach((u) => users.add(u));
   return [...users];
 }
 
@@ -155,6 +157,24 @@ function restart(name, owner) {
   return shell.runAsUser(owner, `pm2 restart ${name}`);
 }
 
+const MEMORY_LIMIT_REGEX = /^\d+[KMG]$/;
+
+/**
+ * Set/ubah batas RAM per-app (`pm2 restart --max-memory-restart`) - PM2
+ * otomatis restart proses itu sendiri kalau kepakainya lewat batas ini.
+ * WAJIB `pm2 save` setelahnya, kalau enggak, restart PM2 daemon (mis. VPS
+ * reboot) bakal ilang settingan-nya dan balik ke "tanpa batas" lagi.
+ */
+function setMemoryLimit(name, owner, limit) {
+  if (!MEMORY_LIMIT_REGEX.test(limit)) {
+    return { ok: false, errorMessage: 'Format limit harus angka + satuan K/M/G (mis. "300M", "1G").' };
+  }
+  const restartResult = shell.runAsUser(owner, `pm2 restart ${name} --max-memory-restart ${limit} --update-env`);
+  if (!restartResult.ok) return restartResult;
+  shell.runAsUser(owner, 'pm2 save');
+  return { ok: true };
+}
+
 function deleteApp(name, owner) {
   return shell.runAsUser(owner, `pm2 delete ${name}`);
 }
@@ -169,6 +189,56 @@ function saveStartup(owner) {
 
 function detail(name, owner) {
   return shell.runAsUser(owner, `pm2 describe ${name}`, { silent: true });
+}
+
+// Kunci internal PM2 sendiri (bukan environment variable app) - dibuang dari
+// hasil getEnv() biar yang tampil di dashboard cuma ENV asli punya app,
+// bukan campur aduk sama metadata PM2 (bikin bingung/susah dibedain).
+const PM2_INTERNAL_ENV_KEYS = new Set([
+  'PM2_HOME', 'pm_id', 'name', 'namespace', 'version', 'pm_cwd', 'exec_mode',
+  'node_args', 'pm_out_log_path', 'pm_err_log_path', 'pm_pid_path', 'exec_interpreter',
+  'watch', 'autorestart', 'unstable_restarts', 'created_at', 'restart_time',
+  'pm_uptime', 'status', 'axm_actions', 'axm_monitor', 'axm_options', 'axm_dynamic',
+  'vizion_running', 'DISABLE_GENERATE_STARTUP_SCRIPT', 'kill_retry_time',
+  'merge_logs', 'vizion', 'autostart', 'instance_var', 'pmx', 'automation', 'treekill',
+  'username', 'windowsHide', 'pm_exec_path', 'km_link', 'PM2_USAGE', 'unique_id',
+  'exit_code',
+  // Environment shell/OS baku yang IKUT KEBAWA karena proses ini di-start
+  // lewat `sudo -u <user>` dari dalam sesi shell API - bukan sesuatu yang
+  // app-nya sendiri set/butuh, cuma noise kalau ditampilin campur sama
+  // env var yang beneran relevan (PORT, DATABASE_URL, dst).
+  'LANG', 'LC_ALL', 'LC_CTYPE', 'LS_COLORS', 'TERM', 'COLORTERM', 'PATH',
+  'MAIL', 'LOGNAME', 'USER', 'HOME', 'SHELL', 'PWD', 'SHLVL', 'XDG_DATA_DIRS',
+  'SUDO_COMMAND', 'SUDO_USER', 'SUDO_UID', 'SUDO_GID',
+]);
+
+/**
+ * Environment variable yang BENERAN aktif di proses PM2 yang lagi jalan -
+ * beda dari isi file `.env` (project/env.js readEnv()), yang cuma "apa yang
+ * TERTULIS di file", belum tentu sama dengan apa yang kepakai kalau proses-
+ * nya di-start dengan override manual (`PORT=xxx pm2 start ...`) atau file
+ * `.env`-nya diedit SETELAH proses terakhir di-restart (baru kepakai abis
+ * restart, bukan otomatis live-reload).
+ */
+function getEnv(name, owner) {
+  const result = shell.runAsUser(owner, 'pm2 jlist', { silent: true });
+  if (!result.ok) return { ok: false, errorMessage: result.errorMessage };
+  try {
+    const start = result.output.indexOf('[');
+    const end = result.output.lastIndexOf(']');
+    const apps = JSON.parse(result.output.slice(start, end + 1));
+    const app = apps.find((a) => a.name === name);
+    if (!app) return { ok: false, errorMessage: `App "${name}" tidak ditemukan di PM2 (mungkin belum pernah di-start).` };
+    const env = {};
+    for (const [key, value] of Object.entries(app.pm2_env || {})) {
+      if (PM2_INTERNAL_ENV_KEYS.has(key)) continue;
+      if (key.startsWith('_') || key === 'env' || typeof value === 'object' || typeof value === 'function') continue;
+      env[key] = value;
+    }
+    return { ok: true, env };
+  } catch (err) {
+    return { ok: false, errorMessage: `Gagal parse output pm2 jlist: ${err.message}` };
+  }
 }
 
 /**
@@ -209,5 +279,7 @@ module.exports = {
   logs,
   saveStartup,
   detail,
+  getEnv,
+  setMemoryLimit,
   getRelevantUsers,
 };

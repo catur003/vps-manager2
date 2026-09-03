@@ -6,6 +6,8 @@ const config = require('../../config/config');
 const audit = require('../audit');
 const commandPolicy = require('../commandPolicy');
 const { validateName } = require('../../menu/helpers');
+const redeploy = require('../../deploy/redeploy');
+const jobStore = require('../jobs/jobStore');
 
 const router = express.Router();
 
@@ -149,6 +151,35 @@ router.post('/:name/delete', (req, res) => {
   audit.recordEnd(auditId, { success: result.ok, message: result.ok ? 'OK' : 'Sebagian step gagal', durationMs: Date.now() - startedAt });
 
   res.json({ success: result.ok, message: result.ok ? `Project "${project.name}" berhasil dihapus.` : 'Sebagian step gagal, cek detail per-step.', data: { results: result.results } });
+});
+
+/**
+ * POST /project/:name/redeploy - tombol manual "Pull & Redeploy" di
+ * dashboard (git pull + npm install + npm build + pm2 restart) - alur
+ * PERSIS sama dengan yang jalan otomatis lewat webhook GitHub
+ * (src/deploy/redeploy.js), cuma dipicu manual dari tombol, bukan push.
+ * Berguna buat project yang webhook-nya belum/gak mau disetup, atau buat
+ * mancing ulang manual kalau auto-deploy pas itu gagal.
+ */
+router.post('/:name/redeploy', (req, res) => {
+  const ACTION = 'project.redeploy';
+  if (!guard(ACTION, res)) return;
+  const { name } = req.params;
+  const check = validateName(name);
+  if (check !== true) return res.status(400).json({ success: false, message: check, code: 'INVALID_INPUT' });
+
+  const project = registry.findProject(name);
+  if (!project) {
+    return res.status(404).json({ success: false, message: `Project "${name}" tidak ditemukan di registry.`, code: 'PROJECT_NOT_FOUND' });
+  }
+
+  const startedAt = Date.now();
+  const auditId = audit.recordStart({ action: ACTION, ip: req.ip, params: { name } });
+  const jobId = jobStore.createJob('manual_redeploy', { name: project.name });
+  audit.recordEnd(auditId, { success: true, message: `Job ${jobId} dibuat.`, durationMs: Date.now() - startedAt });
+
+  res.status(202).json({ success: true, message: 'Redeploy dimulai di background.', data: { jobId } });
+  redeploy.runRedeploy(project, jobId, { triggeredBy: 'manual' });
 });
 
 module.exports = router;

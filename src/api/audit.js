@@ -3,7 +3,15 @@ const path = require('path');
 const crypto = require('crypto');
 
 const AUDIT_LOG_PATH = path.join(__dirname, '..', '..', 'data', 'audit.log');
-const SENSITIVE_KEY_PATTERN = /password|token|secret|key/i;
+const SENSITIVE_KEY_PATTERN = /password|token|secret|key|cloneurl/i;
+// Defense-in-depth: `cloneUrl` (dan field APAPUN ke depannya) bisa nyimpen
+// PAT GitHub tersisip di URL sendiri (https://user:TOKEN@github.com/...) -
+// BUKAN cuma dicek dari nama field-nya (yang di atas), tapi juga dari BENTUK
+// value-nya, biar field baru yang belum kepikiran namanya tetap ketangkep.
+// Ditemukan sebagai bug nyata: cloneUrl LOLOS dari redact() lama (nama
+// field-nya gak match /password|token|secret|key/) dan PAT-nya kejadi ke
+// data/audit.log mentah-mentah tiap kali deploy repo private.
+const EMBEDDED_CREDENTIAL_PATTERN = /^(https?:\/\/)[^/\s@]+@/i;
 
 function ensureDir() {
   const dir = path.dirname(AUDIT_LOG_PATH);
@@ -28,6 +36,9 @@ function redact(value) {
       out[k] = SENSITIVE_KEY_PATTERN.test(k) ? '[REDACTED]' : redact(v);
     }
     return out;
+  }
+  if (typeof value === 'string' && EMBEDDED_CREDENTIAL_PATTERN.test(value)) {
+    return value.replace(/^(https?:\/\/)[^@/]+@/i, '$1[REDACTED]@');
   }
   return value;
 }

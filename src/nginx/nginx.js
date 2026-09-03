@@ -258,6 +258,23 @@ function writeConfFile(filename, template) {
 }
 
 /**
+ * Edit RAW config site yang SUDAH ADA - backup dulu (safety net, biar bisa
+ * di-restore manual dari file .bak-<timestamp> kalau user nyesel/isi jadi
+ * berantakan meski secara syntax valid), baru overwrite lewat
+ * writeConfFile() yang UDAH otomatis test+rollback kalau syntax invalid.
+ * Sebelumnya cuma bisa DIBACA (viewSite) - user harus edit manual lewat
+ * terminal/File Manager buat ubah config site yang sudah ada.
+ */
+function editSite(filename, content) {
+  const listResult = listSites();
+  if (!listResult.ok || !listResult.sites.some((s) => s.file === filename)) {
+    return { ok: false, errorMessage: `Site "${filename}" tidak ditemukan.` };
+  }
+  backupSite(filename); // best-effort, gak nge-block edit kalau backup gagal (mis. disk penuh)
+  return writeConfFile(filename, content);
+}
+
+/**
  * Buat site baru sebagai reverse proxy ke localhost:port (dipakai untuk app Node/PM2).
  * Selalu menyertakan location /.well-known/acme-challenge/ supaya nanti bisa
  * langsung dipakai certbot webroot tanpa perlu edit ulang config.
@@ -375,6 +392,7 @@ module.exports = {
   testConfig,
   reload,
   backupSite,
+  editSite,
   createReverseProxySite,
   upgradeToSSL,
   ensureAcmeChallenge,

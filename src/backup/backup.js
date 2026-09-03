@@ -138,11 +138,39 @@ function backupDatabase(dbName) {
 /**
  * List semua file backup yang ada, diurut terbaru dulu.
  */
+function formatBytes(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+/**
+ * List backup LENGKAP dengan size+tanggal (bukan cuma nama file) - dulu cuma
+ * `ls -t` (nama doang), jadi field size/createdAt yang dashboard.html
+ * sebenarnya udah nunggu (b.size, b.createdAt) SELALU kosong walau kelihatan
+ * kayak field itu "ada" di kode frontend. `ls -la --time-style` sekalian
+ * ambil ukuran+waktu dalam SATU command (bukan `stat` per-file - O(n) proses
+ * terpisah kalau backup-nya ratusan).
+ */
 function listBackups() {
-  const result = shell.runArgs('sudo', ['ls', '-t', backupDir()], { silent: true });
+  const result = shell.runArgs('sudo', ['ls', '-la', '--time-style=+%Y-%m-%dT%H:%M:%S', backupDir()], { silent: true });
   if (!result.ok) return { ok: true, backups: [] }; // folder belum ada / kosong = belum ada backup
-  const files = result.output.split('\n').filter(Boolean);
-  return { ok: true, backups: files };
+
+  const lines = result.output.split('\n').filter(Boolean).slice(1); // buang baris "total N"
+  const backups = [];
+  for (const line of lines) {
+    const parts = line.trim().split(/\s+/);
+    if (parts.length < 7) continue;
+    const [perms, , , , sizeStr, mtime, ...nameParts] = parts;
+    if (perms.startsWith('d')) continue; // skip subfolder kalau ada
+    const filename = nameParts.join(' ');
+    if (!filename || filename === '.' || filename === '..') continue;
+    const sizeBytes = parseInt(sizeStr, 10) || 0;
+    backups.push({ filename, sizeBytes, size: formatBytes(sizeBytes), createdAt: mtime });
+  }
+  backups.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)); // terbaru dulu
+  return { ok: true, backups };
 }
 
 /**

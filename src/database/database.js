@@ -129,17 +129,50 @@ function escapeSqlString(value) {
 /**
  * List semua database (kecuali database sistem bawaan MySQL).
  */
+/**
+ * List database + ukuran REAL (bytes, dari information_schema.tables) +
+ * jumlah tabel - dulu cuma nama doang, jadi kartu/tabel di dashboard gak
+ * pernah bisa nampilin "Storage Used" tanpa query terpisah per-database.
+ * Satu query gabungan (GROUP BY table_schema) lebih murah drpd N query.
+ */
 function listDatabases() {
   const result = runSQL('SHOW DATABASES;');
   if (!result.ok) return { ok: false, databases: [], error: result.errorMessage };
 
   const systemDbs = ['Database', 'information_schema', 'mysql', 'performance_schema', 'sys'];
-  const databases = result.output
+  const names = result.output
     .split('\n')
     .map((l) => l.trim())
     .filter((l) => l && !systemDbs.includes(l));
 
+  const sizeResult = runSQL(
+    "SELECT table_schema, SUM(data_length+index_length), COUNT(*) FROM information_schema.tables GROUP BY table_schema;",
+    { skipHeader: true }
+  );
+  const sizeByDb = {};
+  if (sizeResult.ok) {
+    sizeResult.output.split('\n').filter(Boolean).forEach((line) => {
+      const [schema, bytes, tableCount] = line.split('\t');
+      sizeByDb[schema] = { sizeBytes: parseInt(bytes, 10) || 0, tableCount: parseInt(tableCount, 10) || 0 };
+    });
+  }
+
+  const databases = names.map((name) => ({
+    name,
+    sizeBytes: sizeByDb[name]?.sizeBytes || 0,
+    tableCount: sizeByDb[name]?.tableCount || 0,
+  }));
+
   return { ok: true, databases };
+}
+
+/**
+ * Versi MySQL/MariaDB server yang beneran jalan - dipakai kartu ringkasan,
+ * BUKAN di-hardcode.
+ */
+function getServerVersion() {
+  const result = runSQL('SELECT VERSION();', { skipHeader: true });
+  return result.ok ? result.output.trim() : null;
 }
 
 /**
@@ -154,7 +187,7 @@ function validateDatabaseName(dbName) {
   }
   const { ok, databases, error } = listDatabases();
   if (!ok) return { valid: false, reason: error || 'Gagal ambil daftar database buat validasi.' };
-  if (!databases.includes(dbName)) return { valid: false, reason: `Database "${dbName}" tidak ditemukan.` };
+  if (!databases.some((db) => db.name === dbName)) return { valid: false, reason: `Database "${dbName}" tidak ditemukan.` };
   return { valid: true };
 }
 
@@ -406,6 +439,29 @@ function resetPassword(dbName, dbUser, customPassword) {
 }
 
 /**
+ * Ganti password db_root_user YANG BENERAN di MariaDB, bukan cuma nulis ke
+ * config.json. Dipakai dari PUT /config biar dua-duanya SELALU sinkron -
+ * config.json dan MariaDB nyata pernah kejadian desync (root kekunci total,
+ * config.json nyimpen password lama yang gak valid lagi di server, dan
+ * unix_socket auth juga gak aktif jadi gak ada jalan masuk sama sekali
+ * selain restart --skip-grant-tables manual). Autentikasi pakai kredensial
+ * LAMA yang masih ada di config sebelum di-overwrite (kalau kredensial lama
+ * itu sendiri udah invalid, fungsi ini akan gagal jelas - bukan silently
+ * nulis config.json dengan password yang gak match kenyataan).
+ */
+function changeRootPassword(newPassword) {
+  const { user } = mysqlCreds();
+  if (!newPassword || typeof newPassword !== 'string' || newPassword.trim() === '') {
+    return { ok: false, errorMessage: 'Password baru wajib diisi.' };
+  }
+  const escapedPassword = escapeSqlString(newPassword);
+  const sql = `ALTER USER '${user}'@'localhost' IDENTIFIED VIA mysql_native_password USING PASSWORD('${escapedPassword}'); FLUSH PRIVILEGES;`;
+  const result = runSQL(sql);
+  if (!result.ok) return { ok: false, errorMessage: result.errorMessage };
+  return { ok: true };
+}
+
+/**
  * Hapus database (dan optional user-nya). Dipakai hati-hati, nggak ada undo.
  */
 function dropDatabase(dbName, dbUser) {
@@ -456,9 +512,11 @@ function testCredentials(dbName, dbUser, password) {
 
 module.exports = {
   listDatabases,
+  getServerVersion,
   hasGrantOption,
   createDatabase,
   resetPassword,
+  changeRootPassword,
   dropDatabase,
   testConnection,
   testCredentials,

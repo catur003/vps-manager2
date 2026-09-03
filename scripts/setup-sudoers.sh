@@ -105,6 +105,19 @@ BIN_CP="$(resolve_bin cp)"
 BIN_LN="$(resolve_bin ln)"
 BIN_MKDIR="$(resolve_bin mkdir)"
 BIN_RM="$(resolve_bin rm)"
+# File Manager (filemanager.js) - akses ke SELURUH filesystem, disetujui
+# eksplisit oleh user setelah dikasih tau tradeoff-nya (mitigasi ada di
+# lapisan auth: rate-limit + lockout per-IP, lihat src/api/middleware/
+# auth.js). BIN_TEE di sini bare (BUKAN exact-path lagi) - beda dari rule
+# Wildcard SSL/authorized_keys di bawah yang tetap exact-path karena
+# ditambahin sebelum keputusan "bebas" ini.
+BIN_STAT="$(resolve_bin stat)"
+BIN_MV="$(resolve_bin mv)"
+# Dashboard web nambahin panel Docker (list/start/stop/restart container,
+# mis. FlareSolverr) - API_USER TIDAK dimasukkan ke grup `docker` (grup itu
+# setara root penuh di host, bertentangan sama prinsip least-privilege
+# sudoers ini) - dikasih akses lewat sudo scoped ke subcommand tertentu aja.
+BIN_DOCKER="$(resolve_bin docker)"
 # FIXED: src/ssl/ssl.js manggil `sudo openssl x509 -enddate -noout -in ...`
 # (checkCertExpiry) dan `sudo mkdir ... && sudo chmod -R 755 ...` (siapin
 # webroot ACME challenge) - dua-duanya (openssl, chmod) gak pernah masuk
@@ -239,7 +252,15 @@ ${API_USER} ALL=(${DEPLOY_USER}) NOPASSWD:SETENV: /bin/rm, /usr/bin/find, /usr/b
 # domain/email yang dinamis (certonly -w ... -d <domain>, renew) - gak bisa di-scope
 # ke satu argumen tetap tanpa bikin fitur SSL rusak. Sama alasannya openssl gak
 # di-scope ke argumen tetap (path fullchain per-domain beda-beda).
-${API_USER} ALL=(root) NOPASSWD: ${NGINX_BINARY} -t, ${NGINX_BINARY} -s reload, /bin/systemctl restart nginx, /bin/systemctl reload nginx, /usr/bin/certbot, ${BIN_OPENSSL}, /usr/bin/ss -tlnp, /bin/ss -tlnp, /usr/sbin/ufw status, ${BIN_FIREWALL_CMD} --state, ${BIN_IPTABLES} -L INPUT -n, /usr/bin/lsof, ${BIN_LS}, ${BIN_CAT}, ${BIN_CP}, ${BIN_LN}, ${BIN_MKDIR}, ${BIN_CHMOD}, ${BIN_CHOWN}, ${BIN_RM}, ${BIN_TEST}, ${BIN_GREP}, ${BIN_FAIL2BAN} status, ${BIN_PM2} list, ${BIN_APT_GET} install -y python3-certbot-dns-cloudflare, ${BIN_TEE} /etc/letsencrypt/cloudflare.ini, ${BIN_TAIL}
+${API_USER} ALL=(root) NOPASSWD: ${NGINX_BINARY} -t, ${NGINX_BINARY} -s reload, /bin/systemctl restart nginx, /bin/systemctl reload nginx, /usr/bin/certbot, ${BIN_OPENSSL}, /usr/bin/ss -tlnp, /bin/ss -tlnp, /usr/sbin/ufw status, ${BIN_FIREWALL_CMD} --state, ${BIN_IPTABLES} -L INPUT -n, /usr/bin/lsof, ${BIN_LS}, ${BIN_CAT}, ${BIN_CP}, ${BIN_LN}, ${BIN_MKDIR}, ${BIN_CHMOD}, ${BIN_CHOWN}, ${BIN_RM}, ${BIN_TEST}, ${BIN_GREP}, ${BIN_FAIL2BAN} status*, ${BIN_PM2} list, ${BIN_APT_GET} update, ${BIN_APT_GET} install -y python3-certbot-dns-cloudflare, ${BIN_APT_GET} install -y mysql-server, ${BIN_APT_GET} install -y redis-server, ${BIN_APT_GET} install -y certbot, ${BIN_APT_GET} install -y nginx, ${BIN_APT_GET} install -y ufw, ${BIN_APT_GET} install -y fail2ban, ${BIN_APT_GET} install -y git, ${BIN_APT_GET} install -y unzip, ${BIN_APT_GET} install -y htop, ${BIN_APT_GET} install -y ffmpeg, ${BIN_APT_GET} install -y docker.io, ${BIN_APT_GET} install -y python3-certbot-nginx, ${BIN_APT_GET} install -y postgresql, ${BIN_APT_GET} install -y memcached, ${BIN_APT_GET} install -y build-essential, ${BIN_APT_GET} install -y python3-pip, ${BIN_APT_GET} install -y supervisor, ${BIN_APT_GET} install -y imagemagick, ${BIN_APT_GET} install -y zip, ${BIN_APT_GET} install -y curl, ${BIN_APT_GET} install -y wget, ${BIN_APT_GET} install -y rsync, ${BIN_APT_GET} install -y jq, ${BIN_APT_GET} install -y tmux, ${BIN_APT_GET} install -y vim, ${BIN_TEE}, ${BIN_STAT}, ${BIN_MV}, ${BIN_TAIL}, ${BIN_DOCKER} ps, ${BIN_DOCKER} ps -a, ${BIN_DOCKER} ps --format*, ${BIN_DOCKER} ps -a --format*, ${BIN_DOCKER} start *, ${BIN_DOCKER} stop *, ${BIN_DOCKER} restart *, ${BIN_DOCKER} logs*, ${BIN_DOCKER} inspect*, ${BIN_DOCKER} stats --no-stream*, ${BIN_DOCKER} run *, ${BIN_DOCKER} rm -f *, ${BIN_DOCKER} compose build, ${BIN_DOCKER} compose up -d, ${BIN_DOCKER} compose down, ${BIN_DOCKER} compose restart, ${BIN_DOCKER} compose logs*, ${BIN_DOCKER} compose exec -T app php artisan migrate --force
+
+# Terminal web (src/api/terminal.js) - opsi switch user ke "ubuntu" yang
+# disetujui eksplisit oleh user (lihat AskUserQuestion di riwayat kerja),
+# walau ubuntu punya sudo grup penuh + grup docker (jauh lebih luas dari
+# ${API_USER}). Di-scope ke RunAs "ubuntu" doang (bukan ALL) dan command
+# "/bin/bash" doang - pty.spawn('sudo', ['-u','ubuntu','-i']) di
+# terminal.js bakal jalanin shell default ubuntu (bash) lewat rule ini.
+${API_USER} ALL=(ubuntu) NOPASSWD: /bin/bash
 EOF
 
 if ! visudo -c -f "$TMP_FILE" >/dev/null 2>&1; then

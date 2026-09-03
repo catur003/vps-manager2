@@ -88,6 +88,8 @@ const POLICY = {
   'pm2.list': { confirmRequired: false, auditLevel: 'read' },
   'pm2.detail': { confirmRequired: false, auditLevel: 'read' },
   'pm2.logs': { confirmRequired: false, auditLevel: 'read' },
+  'pm2.getEnv': { confirmRequired: false, auditLevel: 'read' },
+  'pm2.setMemoryLimit': { confirmRequired: false, auditLevel: 'write' },
   // Start/stop/restart - ngubah state proses tapi gampang di-undo (start
   // lagi/restart lagi), jadi gak perlu confirm eksplisit.
   'pm2.start': { confirmRequired: false, auditLevel: 'write' },
@@ -97,6 +99,64 @@ const POLICY = {
   // buat balikin). WAJIB confirm:true.
   'pm2.delete': { confirmRequired: true, auditLevel: 'write' },
   'pm2.saveStartup': { confirmRequired: false, auditLevel: 'write' },
+
+  // --- Docker (container non-PM2, mis. n8n/PocketBase/FlareSolverr) ---
+  'docker.list': { confirmRequired: false, auditLevel: 'read' },
+  'docker.stats': { confirmRequired: false, auditLevel: 'read' },
+  'docker.logs': { confirmRequired: false, auditLevel: 'read' },
+  'docker.start': { confirmRequired: false, auditLevel: 'write' },
+  'docker.stop': { confirmRequired: false, auditLevel: 'write' },
+  'docker.restart': { confirmRequired: false, auditLevel: 'write' },
+  'docker.run': { confirmRequired: false, auditLevel: 'write' },
+  'docker.remove': { confirmRequired: true, auditLevel: 'write' },
+  'dockerCompose.deploy': { confirmRequired: false, auditLevel: 'write' },
+  'dockerCompose.list': { confirmRequired: false, auditLevel: 'read' },
+  'dockerCompose.action': { confirmRequired: false, auditLevel: 'write' },
+
+  // --- Tools / Installer ---
+  'tools.list': { confirmRequired: false, auditLevel: 'read' },
+  'tools.install': { confirmRequired: false, auditLevel: 'write' },
+
+  // --- SSH Keys (authorized_keys deploy_user) ---
+  'sshkeys.list': { confirmRequired: false, auditLevel: 'read' },
+  'sshkeys.add': { confirmRequired: false, auditLevel: 'write' },
+  'sshkeys.remove': { confirmRequired: true, auditLevel: 'write' },
+
+  // --- System (cek port, dsb) ---
+  'system.checkPort': { confirmRequired: false, auditLevel: 'read' },
+  'monitor.serverInfo': { confirmRequired: false, auditLevel: 'read' },
+  'monitor.recentActivity': { confirmRequired: false, auditLevel: 'read' },
+  'notifications.list': { confirmRequired: false, auditLevel: 'read' },
+  'nginx.editSite': { confirmRequired: false, auditLevel: 'write' },
+
+  // --- Cron Jobs ---
+  'cron.list': { confirmRequired: false, auditLevel: 'read' },
+  'cron.add': { confirmRequired: false, auditLevel: 'write' },
+  'cron.update': { confirmRequired: false, auditLevel: 'write' },
+  'cron.toggle': { confirmRequired: false, auditLevel: 'write' },
+  'cron.remove': { confirmRequired: true, auditLevel: 'write' },
+
+  // --- File Manager (akses seluruh filesystem, disetujui eksplisit user -
+  // mitigasi ada di lapisan auth: rate-limit + lockout, lihat auth.js) ---
+  'filemanager.list': { confirmRequired: false, auditLevel: 'read' },
+  'filemanager.read': { confirmRequired: false, auditLevel: 'read' },
+  'filemanager.write': { confirmRequired: false, auditLevel: 'write' },
+  'filemanager.mkdir': { confirmRequired: false, auditLevel: 'write' },
+  'filemanager.rename': { confirmRequired: false, auditLevel: 'write' },
+  'filemanager.chown': { confirmRequired: false, auditLevel: 'write' },
+  'filemanager.chmod': { confirmRequired: false, auditLevel: 'write' },
+  'filemanager.listUsers': { confirmRequired: false, auditLevel: 'read' },
+  'filemanager.delete': { confirmRequired: true, auditLevel: 'write' },
+  'filemanager.upload': { confirmRequired: false, auditLevel: 'write' },
+  'filemanager.download': { confirmRequired: false, auditLevel: 'read' },
+
+  // --- AI Assistant (chat + tool-calling; tool write SELALU lewat confirm-action) ---
+  'ai.listModels': { confirmRequired: false, auditLevel: 'read' },
+  'ai.chat': { confirmRequired: false, auditLevel: 'read' },
+  'ai.confirmAction': { confirmRequired: false, auditLevel: 'write' },
+
+  // --- Manual redeploy (tombol "Pull & Redeploy") ---
+  'project.redeploy': { confirmRequired: false, auditLevel: 'write' },
 
   // --- Nginx ---
   'nginx.listSites': { confirmRequired: false, auditLevel: 'read' },
@@ -146,6 +206,7 @@ const POLICY = {
   // Hapus akun tersimpan - project yang masih pakai token ini di remote URL
   // TIDAK ikut ke-update, jadi WAJIB confirm biar user sadar konsekuensinya.
   'config.github.remove': { confirmRequired: true, auditLevel: 'write' },
+  'config.testNotify': { confirmRequired: false, auditLevel: 'read' },
 
   // --- Doctor / self-check (sudoers, command availability) ---
   'doctor.checkPermissions': { confirmRequired: false, auditLevel: 'read' },
@@ -190,6 +251,7 @@ const POLICY = {
 
   // --- Security (read-only) ---
   'security.checkFirewall': { confirmRequired: false, auditLevel: 'read' },
+  'security.sshAttempts': { confirmRequired: false, auditLevel: 'read' },
   'security.listOpenPorts': { confirmRequired: false, auditLevel: 'read' },
   'security.checkFail2ban': { confirmRequired: false, auditLevel: 'read' },
   'security.checkSshConfig': { confirmRequired: false, auditLevel: 'read' },

@@ -206,8 +206,17 @@ function stripCredentials(url) {
  * sudah dipakai checkout()/log()/diffNameOnly() di file ini, url dikirim
  * sebagai satu argv literal, gak pernah lewat parsing shell sama sekali.
  */
+/**
+ * FIXED: bug keamanan nyata - `url` di sini SERING mengandung PAT GitHub
+ * tersisip (dari buildAuthenticatedUrl), tapi shell.runArgs (dipanggil lewat
+ * runAsUserArgs) defaultnya nge-log FULL COMMAND ke stdout PM2
+ * (logger.info("Menjalankan: ...")) kalau `silent` gak eksplisit true -
+ * ketauan pas PAT asli kejadi ke terminal/log server mentah-mentah pas
+ * fungsi ini dipanggil manual buat debug. `silent: true` WAJIB di sini,
+ * beda dari command lain di file ini yang argumennya emang aman dilog.
+ */
 function setRemoteUrl(projectPath, url, deployUser) {
-  return shell.runAsUserArgs(deployUser, 'git', ['remote', 'set-url', 'origin', url], { cwd: projectPath });
+  return shell.runAsUserArgs(deployUser, 'git', ['remote', 'set-url', 'origin', url], { cwd: projectPath, silent: true });
 }
 
 module.exports = {

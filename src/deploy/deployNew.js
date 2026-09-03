@@ -91,8 +91,16 @@ function prepareAndClone(opts, onStep = () => {}) {
   // tetap yang disimpan ke registry & ditampilkan ke layar - lihat catatan di
   // src/git/git.js buildAuthenticatedUrl()/stripCredentials().
   const cloneUrl = opts.cloneUrl || gitRepo;
+  // FIXED: bug keamanan nyata - `cloneUrl` bisa mengandung PAT GitHub
+  // tersisip (repo private), tapi tanpa `silent: true` shell.runArgs nge-log
+  // FULL COMMAND (termasuk token mentah) ke stdout PM2
+  // (vps-manager-api-out.log) tiap kali ada deploy repo private. Ketauan
+  // pas nyoba benerin git push manual buat user lain - token kejadi ke
+  // log server, bukan cuma sekali ini doang tapi di SETIAP deploy repo
+  // private sejak fitur ini ada.
   const cloneResult = shell.runAsUserArgs(deployUser, 'git', ['clone', '-b', branch, cloneUrl, folderPath], {
     timeoutMs: 5 * 60 * 1000, // 5 menit
+    silent: true,
   });
   if (!cloneResult.ok) {
     // FIX: sebelumnya folder yang barusan dibuat (mkdir+chown di atas)

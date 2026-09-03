@@ -53,6 +53,7 @@ function run(command, options = {}) {
       ok: false,
       output: err.stdout ? err.stdout.toString() : '',
       errorMessage: stderrText || err.message,
+      exitCode: typeof err.status === 'number' ? err.status : null,
     };
   }
 }
@@ -113,6 +114,7 @@ function runArgs(file, args, options = {}) {
       ok: false,
       output: err.stdout ? err.stdout.toString() : '',
       errorMessage: stderrText || err.message,
+      exitCode: typeof err.status === 'number' ? err.status : null,
     };
   }
 }

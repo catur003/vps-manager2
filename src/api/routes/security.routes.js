@@ -51,4 +51,13 @@ router.get('/fail2ban', (req, res) => handle('security.checkFail2ban', req, res,
  */
 router.get('/ssh', (req, res) => handle('security.checkSshConfig', req, res, security.checkSshConfig));
 
+/**
+ * Percobaan login SSH terakhir (real, dari /var/log/auth.log) - buat kartu
+ * "Recent Login Attempts".
+ */
+router.get('/ssh-attempts', (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit, 10) || 10, 50);
+  handle('security.sshAttempts', req, res, () => security.getRecentSshAttempts(limit));
+});
+
 module.exports = router;

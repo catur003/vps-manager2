@@ -11,12 +11,16 @@
  */
 const jobStore = require('./jobStore');
 const deployNew = require('../../deploy/deployNew');
+const notify = require('../../notify/notify');
 
 const jobId = process.argv[2];
 
+// notify.notify() jaringan (https ke Discord/Telegram, timeout 10 detik) -
+// dipanggil SEBELUM process.exit() biar request-nya sempat kekirim (fork ini
+// mati begitu exit() dipanggil, gak nunggu promise yang masih pending).
 function fail(message, stoppedAtKey = null) {
   jobStore.updateJob(jobId, { status: 'failed', message, stoppedAtKey });
-  process.exit(1);
+  notify.notify(`❌ Deploy gagal: "${job?.params?.name || jobId}"\n${message}`).finally(() => process.exit(1));
 }
 
 if (!jobId) {
@@ -39,7 +43,7 @@ try {
 
   if (result.ok) {
     jobStore.updateJob(jobId, { status: 'success', message: `Deploy "${job.params.name}" berhasil.` });
-    process.exit(0);
+    notify.notify(`✅ Deploy berhasil: "${job.params.name}" (${job.params.domain || '-'})`).finally(() => process.exit(0));
   } else {
     // stoppedAtKey cuma ada kalau gagalnya di tahap finishDeploy (clone udah
     // sukses). Kalau gagal di prepareAndClone (safety check/folder/clone),
