@@ -42,21 +42,30 @@ function getToken() {
 }
 
 /**
- * Cari Zone ID dari nama domain (mis. "zenlab.id") - dibutuhkan SEMUA
- * operasi lain di bawah, Cloudflare API-nya sendiri gak nerima nama domain
- * langsung, harus lewat Zone ID. `domain` di sini WAJIB apex domain
- * (root zone di Cloudflare, mis. "zenlab.id"), BUKAN subdomain
- * (mis. "anime.zenlab.id" harus dicari pakai "zenlab.id").
+ * Cari Zone ID dari nama domain APAPUN (apex ATAU subdomain) - Cloudflare
+ * API sendiri cuma bisa dicari pakai nama zone PERSIS (apex-nya), jadi kalau
+ * yang dikasih itu subdomain (mis. "anime.zenlab.id"), coba mundur selabel
+ * demi selabel ("anime.zenlab.id" -> "zenlab.id") sampai ketemu zone yang
+ * valid atau habis labelnya. FIXED: sebelumnya cuma nyoba domain PERSIS
+ * doang, jadi 3 dari 4 domain terdaftar (semua subdomain di bawah zenlab.id)
+ * selalu gagal "zone tidak ditemukan" walau token-nya valid dan zone
+ * induknya beneran ada.
  */
-async function findZoneId(apexDomain) {
+async function findZoneId(domain) {
   const token = getToken();
   if (!token) return { ok: false, errorMessage: 'Cloudflare API Token belum diset di Settings.' };
-  const result = await requestCloudflare('GET', `/zones?name=${encodeURIComponent(apexDomain)}`, token);
-  if (!result.ok) return result;
-  if (!result.result || result.result.length === 0) {
-    return { ok: false, errorMessage: `Zone "${apexDomain}" tidak ditemukan di akun Cloudflare token ini.` };
+
+  const labels = domain.split('.');
+  // Minimal 2 label (mis. "zenlab.id") - di bawah itu bukan domain valid lagi.
+  for (let i = 0; i <= labels.length - 2; i++) {
+    const candidate = labels.slice(i).join('.');
+    const result = await requestCloudflare('GET', `/zones?name=${encodeURIComponent(candidate)}`, token);
+    if (!result.ok) return result; // error jaringan/token - langsung stop, jangan coba kandidat lain
+    if (result.result && result.result.length > 0) {
+      return { ok: true, zoneId: result.result[0].id, matchedZone: candidate };
+    }
   }
-  return { ok: true, zoneId: result.result[0].id };
+  return { ok: false, errorMessage: `Zone buat "${domain}" (atau induknya) tidak ditemukan di akun Cloudflare token ini.` };
 }
 
 async function purgeCache(apexDomain) {
