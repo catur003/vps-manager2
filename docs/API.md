@@ -33,6 +33,22 @@ Dokumentasi lengkap semua endpoint REST API `vps-manager`. API ini dibuat supaya
 - [Cleanup](#cleanup)
 - [Configuration](#configuration)
 - [Doctor](#doctor)
+- [System](#system)
+- [Domains / SSL Aliases](#domains--ssl-aliases)
+- [Node Manager](#node-manager)
+- [Docker](#docker)
+- [Docker Compose](#docker-compose)
+- [Tools / Installer](#tools--installer)
+- [SSH Keys](#ssh-keys)
+- [File Manager](#file-manager)
+- [AI Assistant](#ai-assistant)
+- [Notifications (feed)](#notifications-feed)
+- [Cron Jobs](#cron-jobs)
+- [Cloudflare Integration](#cloudflare-integration)
+- [Redis Monitoring](#redis-monitoring)
+- [PostgreSQL](#postgresql)
+- [Webhook GitHub (auto-deploy)](#webhook-github-auto-deploy)
+- [Terminal (WebSocket)](#terminal-websocket)
 
 ---
 
@@ -153,6 +169,20 @@ Status resource server saat ini (setara menu CLI "Server Monitor"). Read-only.
 }
 ```
 
+### `GET /monitor/bandwidth`
+Bandwidth & Quota Monitoring — total trafik interface publik host (RX/TX kumulatif sejak boot + histori harian 30 hari, disample tiap 1 jam), network I/O per container Docker, dan storage R2 (Cloudflare) yang dipakai. Read-only.
+
+**Response 200 — `data`:** `{ "current": { "rxBytesLabel": "...", "txBytesLabel": "..." }, "today": {...}, "monthTotalBytesLabel": "...", "dailyHistory": [{ "date": "2026-09-01", "rxBytes": 123, "txBytes": 456 }], "dockerContainers": [{ "name": "...", "rx": "6.87MB", "tx": "1.74MB" }], "r2": { "bytesLabel": "22.3 MB", "objectCount": 1 } }` (`r2` bisa `null` kalau rclone/config belum di-setup).
+
+### `GET /monitor/server-info`
+Info statis server (OS, arch, hostname, dst) — beda dari `GET /monitor` yang live/berubah-ubah. Read-only.
+
+### `GET /monitor/recent-activity`
+N baris terakhir dari `data/audit.log` (real, bukan data dummy) — dipakai widget "Recent Activity" di Overview. Read-only.
+
+### `GET /monitor/check-port/:port`
+Cek apakah 1 port TCP sedang dipakai proses lain — dipanggil dari form Deploy SEBELUM submit, biar ketauan bentrok port sebelum app di-deploy (bukan ketauan belakangan lewat error "address already in use"). Read-only.
+
 ---
 
 ## Deploy
@@ -267,6 +297,25 @@ Hapus project dari PM2 + Nginx + registry, dan **opsional** database & folder fi
 | `confirm` | boolean | — | Wajib `true` |
 
 **Response 200 — `data.results`:** array hasil per-step (bisa sukses sebagian, bukan all-or-nothing).
+
+### `POST /project/:name/redeploy`
+Tombol "Pull & Redeploy" manual — `git pull` + `npm install` + `npm build` + `pm2 restart`, alur PERSIS sama dengan yang jalan otomatis lewat webhook GitHub (lihat section `Webhook GitHub`). **Async** — balas `202` + `jobId`, progress via `GET /jobs/:id`.
+
+**Response 202:** `{ "data": { "jobId": "..." } }`
+**Error khusus:** `PROJECT_NOT_FOUND` (404).
+
+### `POST /project/:name/rollback` — 🔒 butuh `confirm`
+Balikin project ke commit deploy **sebelumnya** (`git checkout` ke `previousCommit` yang otomatis dicatat tiap kali `redeploy`/webhook sukses, lalu install+build+restart ulang). Cuma nyimpen 1 slot "sebelumnya" — gak bisa mundur >1 langkah, dan bisa di-toggle bolak-balik (rollback lagi = balik ke yang tadi di-rollback). **Async** — balas `202` + `jobId`.
+
+**Body:** `{ "confirm": true }`
+**Response 202:** `{ "data": { "jobId": "..." } }`
+**Error khusus:** `PROJECT_NOT_FOUND` (404), `NO_ROLLBACK_TARGET` (400 — project belum pernah redeploy lewat panel ini, jadi belum ada `previousCommit`).
+
+### `PATCH /project/:name/webhook`
+Toggle on/off auto-deploy via webhook GitHub untuk project ini (opt-in per-project, default OFF — lihat section `Webhook GitHub`).
+
+**Body:** `{ "enabled": true }`
+**Response 200:** `{ "success": true, "message": "..." }`
 
 ---
 
@@ -503,8 +552,12 @@ Scan & hapus cache/file regenerable (build cache, npm/yarn/pnpm/pip cache, log P
 | GET | `/cleanup/scan/user/:username` | – | Scan cache di home folder 1 user OS |
 | GET | `/cleanup/scan/projects` | – | Scan cache di semua folder project (path dari cwd PM2) |
 | POST | `/cleanup/delete` | ✅ | Hapus 1 item hasil scan (folder/file) |
+| GET | `/cleanup/scan/system` | – | Scan cache **level sistem** (npm cache semua user, APT package cache, Docker image/build cache reclaimable, systemd journal) — beda dari 2 endpoint di atas yang per-user/per-project |
+| POST | `/cleanup/clean/system` | ✅ | Bersihkan 1 kategori hasil scan system (`{ "key": "npm_cache"|"apt_cache"|"docker_prune"|"journal", "confirm": true }`) — semua kategori regenerable otomatis oleh tool masing-masing |
 
 **Response scan — `data`:** `{ "items": [...], "totalBytes": 123456, "totalBytesLabel": "120.5 MB" }`
+
+**Response `GET /cleanup/scan/system` — `data`:** `{ "categories": [{ "key": "npm_cache", "label": "...", "bytes": 123, "bytesLabel": "...", "detail": [...] }, ...], "totalBytes": 123 }`
 
 **`POST /cleanup/delete`** body: `{ "username": "www", "targetPath": "/home/www/app/.next/cache", "confirm": true }` — `targetPath` divalidasi harus di dalam boundary yang wajar (home folder user itu, atau folder cwd salah satu app PM2), tidak bisa path sembarang.
 
@@ -595,14 +648,221 @@ Read-only.
 
 ---
 
+## System
+
+| Method | Path | Tipe | Confirm? | Keterangan |
+|---|---|---|---|---|
+| POST | `/system/exec` | sync | – | Jalankan 1 command shell whitelist (dari `commandPolicy.js`), bukan command bebas dari body |
+
+---
+
+## Domains / SSL Aliases
+
+`:domain` = domain utama (harus punya site Nginx terdaftar). Beda dari `Domains` di menu CLI — endpoint ini fokus ke ringkasan status (Nginx/SSL/project) + kelola alias domain (`www.` dst) per domain.
+
+| Method | Path | Tipe | Confirm? | Keterangan |
+|---|---|---|---|---|
+| GET | `/domains` | sync | – | List semua domain (site Nginx) + status Nginx/SSL/project per domain |
+| GET | `/domains/:domain` | sync | – | Detail 1 domain |
+| POST | `/domains/:domain/aliases` | sync | – | Tambah alias (mis. `www.domain.com`) — otomatis include di SSL & Nginx server_name |
+| DELETE | `/domains/:domain/aliases/:alias` | sync | ✅ | Hapus 1 alias |
+
+---
+
+## Node Manager
+
+Kelola versi Node.js per-user (via `nvm`) dan pin versi tertentu per-project.
+
+| Method | Path | Tipe | Confirm? | Keterangan |
+|---|---|---|---|---|
+| GET | `/node/projects` | sync | – | List semua project + `node_version` yang di-pin (kalau ada) |
+| GET | `/node/versions` | sync | – | Versi Node terinstall (`nvm ls`) untuk `deploy_user` |
+| GET | `/node/global-info` | sync | – | Info Node aktif: versi npm, global packages, path node/npm, platform |
+| GET | `/node/versions/available` | sync | – | Versi LTS terbaru per major (`nvm ls-remote --lts`), buat dropdown install |
+| POST | `/node/versions/install` | sync | – | Install 1 versi Node baru lewat `nvm install` |
+| DELETE | `/node/versions/:version` | sync | – | Uninstall 1 versi Node (`nvm uninstall`) |
+| POST | `/node/versions/default` | sync | – | Set versi Node default (`nvm alias default`) |
+| POST | `/node/project/:name` | sync | – | Pin/lepas pin versi Node khusus 1 project (dipakai PM2 start-nya) |
+
+---
+
+## Docker
+
+Container Docker biasa (bukan Docker Compose — lihat section terpisah di bawah). Semua command lewat `sudo docker ...` scoped ketat di sudoers.
+
+`:name` = nama container Docker (harus lolos `isValidContainerName`).
+
+| Method | Path | Tipe | Confirm? | Keterangan |
+|---|---|---|---|---|
+| GET | `/docker` | sync | – | List semua container (jalan + berhenti). Kalau Docker belum terinstall, balikin `200` dengan `data.notInstalled: true` (bukan error) |
+| GET | `/docker/stats` | sync | – | CPU/Mem live semua container (`docker stats --no-stream`) |
+| GET | `/docker/:name/inspect` | sync | – | Detail container: image, working dir, user, env vars (value sensitif di-redact), mounts, network |
+| GET | `/docker/:name/logs?lines=100` | sync | – | Log container |
+| POST | `/docker` | sync | – | Jalankan container baru (`docker run`) dari image tertentu |
+| DELETE | `/docker/:name` | sync | ✅ | Hapus container (`docker rm -f`) |
+| POST | `/docker/:name/start` | sync | – | Start |
+| POST | `/docker/:name/stop` | sync | – | Stop |
+| POST | `/docker/:name/restart` | sync | – | Restart |
+
+**Terminal masuk container**: bukan lewat REST, tapi WebSocket `wss://.../docker-exec?key=<apikey>&container=<name>&shell=sh|bash` — pola sama seperti `/terminal` (lihat bawah), tapi jalanin `docker exec -it <container> sh/bash`. Divalidasi ulang di server: nama container harus ada di `docker ps -a` sebelum PTY di-spawn.
+
+---
+
+## Docker Compose
+
+Deploy app berbasis `docker-compose.yml` (auto-detect framework, mis. Laravel — generate Dockerfile+nginx+supervisor sendiri kalau perlu).
+
+| Method | Path | Tipe | Confirm? | Keterangan |
+|---|---|---|---|---|
+| POST | `/docker-compose` | **async** | – | Deploy stack baru dari git repo (clone → build → up). Balikin `jobId`, progress via `GET /jobs/:id` |
+| GET | `/docker-compose` | sync | – | List semua stack yang terdaftar |
+| POST | `/docker-compose/action/:action` | sync | – | Aksi ke stack (`up`/`down`/`restart`/dst) — `:action` di-whitelist, stack ditentukan dari body, BUKAN dari registry (Docker Compose stack tidak masuk `registry.json`) |
+
+---
+
+## Tools / Installer
+
+Deteksi & install/uninstall paket sistem (nginx, mysql-server, redis-server, docker.io, dst — daftar tetap di kode, bukan dari input).
+
+| Method | Path | Tipe | Confirm? | Keterangan |
+|---|---|---|---|---|
+| GET | `/tools` | sync | – | List semua tool + status terinstall/belum (`which`/`dpkg -s`) |
+| POST | `/tools/:key/install` | sync | – | `sudo apt-get install -y <pkg>` (pkg dari whitelist internal by key) |
+| POST | `/tools/:key/uninstall` | sync | ✅ | `sudo apt-get remove -y <pkg>` (bukan `purge` — config/data dibiarin) |
+
+---
+
+## SSH Keys
+
+| Method | Path | Tipe | Confirm? | Keterangan |
+|---|---|---|---|---|
+| GET | `/ssh-keys` | sync | – | List public key di `authorized_keys` deploy_user |
+| POST | `/ssh-keys` | sync | – | Tambah public key baru |
+| DELETE | `/ssh-keys/:fingerprint` | sync | ✅ | Hapus 1 key by fingerprint |
+
+---
+
+## File Manager
+
+Akses filesystem scoped (blacklist folder sistem, sama prinsip dengan `cleanup.js`).
+
+| Method | Path | Tipe | Confirm? | Keterangan |
+|---|---|---|---|---|
+| GET | `/filemanager/list?path=` | sync | – | List isi folder |
+| GET | `/filemanager/read?path=` | sync | – | Baca isi 1 file text |
+| POST | `/filemanager/write` | sync | – | Tulis/timpa isi file |
+| POST | `/filemanager/mkdir` | sync | – | Buat folder baru |
+| GET | `/filemanager/users` | sync | – | List user OS (buat dropdown "ganti owner") |
+| POST | `/filemanager/chown` | sync | – | Ganti owner file/folder |
+| POST | `/filemanager/chmod` | sync | – | Ganti permission (mode octal) |
+| POST | `/filemanager/rename` | sync | – | Rename/pindah file/folder |
+| DELETE | `/filemanager/` | sync | ✅ | Hapus file/folder (body: `{ path, confirm: true }`) |
+| POST | `/filemanager/upload` | sync (multipart) | – | Upload file (field `file`) |
+| GET | `/filemanager/download?path=` | sync | – | Download 1 file |
+
+---
+
+## AI Assistant
+
+Chat dengan LLM (OpenAI-compatible endpoint, model/base URL/API key diatur di Configuration) yang bisa manggil tool internal panel (restart app, cek log, dst) lewat function-calling.
+
+| Method | Path | Tipe | Confirm? | Keterangan |
+|---|---|---|---|---|
+| GET | `/ai/models` | sync | – | List model yang tersedia dari provider yang dikonfigurasi |
+| POST | `/ai/chat` | sync | – | Kirim pesan chat, balikin respons (termasuk tool-call request kalau ada) |
+| POST | `/ai/confirm-action` | sync | – | Konfirmasi eksekusi 1 tool-call yang diminta AI (aksi destruktif tetap butuh confirm eksplisit user, AI tidak bisa lewatin ini) |
+
+---
+
+## Notifications (feed)
+
+Beda dari setting Discord/Telegram (`PUT /config`) — ini baca histori notifikasi REAL dari `data/audit.log`, dipakai halaman "Notifikasi" di dashboard.
+
+| Method | Path | Tipe | Confirm? | Keterangan |
+|---|---|---|---|---|
+| GET | `/notifications` | sync | – | List event terbaru (deploy sukses/gagal, backup gagal, disk penuh, PM2 crash-loop, dll) — status baca/belum-baca disimpan di `localStorage` browser, bukan di server |
+
+---
+
+## Cron Jobs
+
+Kelola `crontab` per-user OS. Job baru otomatis dibungkus wrapper (`scripts/cron-wrapper.sh`) yang catat run history — job lama (dibuat manual di luar panel) tetap kebaca tapi tanpa history.
+
+`:index` = posisi baris di crontab user tsb (dari `GET /cron`, bisa berubah kalau baris lain ditambah/dihapus — selalu refresh dulu sebelum update/delete).
+
+| Method | Path | Tipe | Confirm? | Keterangan |
+|---|---|---|---|---|
+| GET | `/cron?user=` | sync | – | List cron job user tsb, termasuk `lastRun` (status/durasi run terakhir) kalau ada |
+| GET | `/cron/:index/history?user=` | sync | – | Histori run (sampai 20 terakhir) 1 job |
+| POST | `/cron` | sync | – | Tambah job baru (`{ user, schedule, command }`) |
+| PUT | `/cron/:index?user=` | sync | – | Update jadwal/command 1 job |
+| POST | `/cron/:index/toggle?user=` | sync | – | Enable/disable tanpa hapus (prefix `#DISABLED#`) |
+| DELETE | `/cron/:index?user=` | sync | ✅ | Hapus job permanen |
+
+---
+
+## Cloudflare Integration
+
+Butuh `cloudflare_api_token` diisi di Configuration (App Settings). `:domain` boleh apex ATAU subdomain — otomatis diresolve ke zone induknya kalau subdomain gak match langsung.
+
+| Method | Path | Tipe | Confirm? | Keterangan |
+|---|---|---|---|---|
+| GET | `/cloudflare/security-level?domain=` | sync | – | Baca status Under Attack Mode saat ini (`medium`/`under_attack`) |
+| POST | `/cloudflare/purge-cache` | sync | – | Purge semua cache Cloudflare utk domain ini |
+| POST | `/cloudflare/under-attack` | sync | – | Toggle Under Attack Mode (`{ domain, enabled: true|false }`) |
+
+---
+
+## Redis Monitoring
+
+Read-only, cuma jalan kalau `redis-server` terinstall & aktif.
+
+| Method | Path | Tipe | Confirm? | Keterangan |
+|---|---|---|---|---|
+| GET | `/redis/status` | sync | – | Snapshot lengkap: memory, ops/sec, hit rate, clients, persistence (RDB/AOF), replication, keyspace per-db, top commands. Balikin `data.notInstalled: true` kalau Redis belum ada |
+
+---
+
+## PostgreSQL
+
+Engine kedua selain MySQL/MariaDB (section `Database` di atas) — API terpisah karena syntax SQL & mekanisme auth beda (TCP + password `scram-sha-256`, kredensial `pg_root_user`/`pg_root_password` di Configuration).
+
+| Method | Path | Tipe | Confirm? | Keterangan |
+|---|---|---|---|---|
+| GET | `/postgres` | sync | – | List database (exclude template & `postgres` bawaan) + ukuran + versi server. `data.notInstalled: true` kalau PostgreSQL belum ada |
+| POST | `/postgres` | sync | – | Buat database + role baru sekaligus (`{ dbName, dbUser, password? }`) |
+| POST | `/postgres/:dbName/reset-password` | sync | – | Reset password 1 role (`{ dbUser, password? }`) |
+| DELETE | `/postgres/:dbName` | sync | ✅ | Hapus database (paksa putus semua koneksi aktif dulu) + role-nya (`{ dbUser?, confirm: true }`) |
+| POST | `/postgres/test` | sync | – | Test koneksi pakai kredensial root di Configuration |
+
+---
+
+## Webhook GitHub (auto-deploy)
+
+**Bukan** di bawah `apiKeyAuth` — auth-nya sendiri lewat HMAC signature (`X-Hub-Signature-256`, dicek pakai `webhook_secret` di Configuration). Harus diaktifkan eksplisit per-project dulu (opt-in, default OFF — lihat `PATCH /project/:name/webhook` di section `Project`).
+
+| Method | Path | Tipe | Confirm? | Keterangan |
+|---|---|---|---|---|
+| POST | `/webhooks/github/:projectName` | **async** | – | Dipanggil GitHub tiap `git push`. Balas `202` segera, proses (pull+install+build+restart) lanjut di background. Ditolak `403 WEBHOOK_NOT_ENABLED` kalau project ini belum diaktifkan webhook-nya |
+
+---
+
+## Terminal (WebSocket)
+
+Bukan REST — koneksi `wss://.../terminal?key=<apikey>&user=<optional>`. Default jalan sebagai user proses API (`deploy_user`), bisa switch ke user lain yang di-whitelist eksplisit (`ubuntu`) via query `?user=`. Auth API key dicek SEBELUM PTY di-spawn (bukan header, karena WebSocket handshake browser gak bisa nyetel `Authorization` custom). Ping/pong keepalive tiap 25 detik, auto-reconnect di sisi client kalau putus.
+
+---
+
 ## Ringkasan Cakupan vs Menu CLI
 
-Hampir semua menu CLI (Deploy, Git, PM2, Nginx, SSL issue, Database, Backup, Security, Scanner, Cleanup, Configuration + akun GitHub, Permission/Doctor, Project `.env` & delete, Build/Install/Seed manual, Nginx error log) sudah punya endpoint yang setara di dokumen ini.
+Hampir semua menu CLI (Deploy, Git, PM2, Nginx, SSL issue, Database, Backup, Security, Scanner, Cleanup, Configuration + akun GitHub, Permission/Doctor, Project `.env` & delete, Build/Install/Seed manual, Nginx error log) plus seluruh fitur dashboard web (Docker, Docker Compose, Node Manager, Tools/Installer, SSH Keys, File Manager, AI Assistant, Notifikasi, Cron Jobs, Cloudflare, Redis, PostgreSQL, Webhook auto-deploy, Deploy rollback, Terminal) sudah punya endpoint yang terdokumentasi di sini. Dokumen ini sempat ketinggalan cukup jauh dari implementasi asli — audit lewat `graphify` (lihat `graphify-out/GRAPH_REPORT.md`) yang menemukan gap ini.
 
-**Belum ada endpoint-nya** (masih CLI-only) per fase ini:
+**Belum ada endpoint-nya** (masih CLI-only atau UI-only) per fase ini:
 - Menu 1 "Import Project ke Registry" (registrasi project existing yang belum tercatat)
 - List semua project di registry (`GET /project`) — API saat ini cuma bisa akses project **per-nama** (`:name`) yang harus sudah kamu tahu, belum ada endpoint list-nya
 - Cek expiry & renew-all sertifikat SSL (`ssl.checkExpiry` / `ssl.renewAll` di menu SSL Manager)
-- PM2 Logs & Nginx Error Log via menu "Log Viewer" gabungan — PM2 log sudah ada (`GET /pm2/:name/logs`) dan Nginx error log sudah ada (`GET /nginx/sites/:file/error-log`, ditambahkan bareng dokumen ini), tapi tidak ada 1 endpoint gabungan seperti tampilan menu CLI-nya
+- PM2 Logs & Nginx Error Log via menu "Log Viewer" gabungan — PM2 log sudah ada (`GET /pm2/:name/logs`) dan Nginx error log sudah ada (`GET /nginx/sites/:file/error-log`), tapi tidak ada 1 endpoint gabungan seperti tampilan menu CLI-nya
+- Deploy rollback: **cuma tersedia untuk app PM2 native**, belum ada untuk stack Docker Compose (arsitekturnya beda — stack Compose tidak tercatat di `registry.json` seperti project PM2, jadi belum ada tempat nyimpen `previousCommit`-nya)
+- Bandwidth & Quota Monitoring, Disk Cleanup — fitur ini ada di dashboard tapi belum ditulis section API-nya secara terpisah di dokumen ini (lihat `GET /monitor/bandwidth`, `GET /cleanup/scan/system`, `POST /cleanup/clean/system` di kode `monitor.routes.js`/`cleanup.routes.js` kalau butuh detail)
 
 Kalau kamu butuh salah satu di atas untuk mobile app-nya, tinggal bilang — pola & tempatnya (route + `commandPolicy.js`) sudah konsisten, tinggal ditambah.
