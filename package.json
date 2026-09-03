@@ -5,14 +5,16 @@
   "bin": {
     "vps-manager": "./bin/vps-manager.js",
     "vps-api": "./bin/vps-api.js",
-    "vps-api-keygen": "./bin/vps-api-keygen.js"
+    "vps-api-keygen": "./bin/vps-api-keygen.js",
+    "vps-bootstrap": "./bin/vps-bootstrap.js"
   },
   "main": "bin/vps-manager.js",
   "type": "commonjs",
   "scripts": {
     "start": "node bin/vps-manager.js",
     "api": "node bin/vps-api.js",
-    "api:keygen": "node bin/vps-api-keygen.js"
+    "api:keygen": "node bin/vps-api-keygen.js",
+    "bootstrap": "node bin/vps-bootstrap.js"
   },
   "dependencies": {
     "boxen": "^5.1.2",

@@ -83,6 +83,36 @@ function pull(projectPath, deployUser, account) {
   return result;
 }
 
+/**
+ * Push commit lokal (yang dibikin manual di server, mis. lewat File
+ * Manager/edit langsung) balik ke remote origin. Pola sama persis kayak
+ * pull() (pasang credential sementara kalau remote belum ada & account
+ * dikasih, balikin ke URL bersih abis selesai - sukses ATAU gagal tetap
+ * dibalikin, supaya credential gak pernah nyangkut permanen di git config).
+ *
+ * Push SENGAJA gak pernah pakai `--force` - kalau remote udah maju duluan
+ * (org lain / CI push commit baru), ini bakal gagal dengan pesan git
+ * standar ("failed to push some refs... Updates were rejected") - itu
+ * SENGAJA gak ditangkep/disamarkan di sini, biar operator sadar ada
+ * conflict yang perlu diselesain manual (pull dulu / rebase), bukan
+ * ke-timpa diam-diam.
+ */
+function push(projectPath, deployUser, account) {
+  const remoteResult = shell.runAsUser(deployUser, 'git remote get-url origin', { cwd: projectPath, silent: true });
+  const currentUrl = remoteResult.ok ? remoteResult.output.trim() : null;
+  const hasCredentials = currentUrl && /^https:\/\/[^/@]+@/i.test(currentUrl);
+
+  if (!currentUrl || hasCredentials || !account) {
+    return shell.runAsUser(deployUser, 'git push', { cwd: projectPath });
+  }
+
+  const authedUrl = buildAuthenticatedUrl(currentUrl, account);
+  setRemoteUrl(projectPath, authedUrl, deployUser);
+  const result = shell.runAsUser(deployUser, 'git push', { cwd: projectPath });
+  setRemoteUrl(projectPath, currentUrl, deployUser);
+  return result;
+}
+
 function getHead(projectPath, deployUser) {
   const result = shell.runAsUser(deployUser, 'git rev-parse HEAD', { cwd: projectPath, silent: true });
   return result.ok ? result.output.trim() : null;
@@ -222,6 +252,7 @@ function setRemoteUrl(projectPath, url, deployUser) {
 module.exports = {
   status,
   pull,
+  push,
   getHead,
   getRemoteUrl,
   diffNameOnly,

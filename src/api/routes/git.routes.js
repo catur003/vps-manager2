@@ -158,6 +158,51 @@ router.post('/:name/pull', (req, res) => {
 });
 
 /**
+ * Push commit lokal (dibuat manual di server, mis. lewat File Manager/edit
+ * langsung) balik ke remote origin. Pola sama persis kayak /pull di atas -
+ * account GitHub opsional buat auth sementara. TIDAK pernah pakai --force -
+ * kalau remote udah maju duluan, ini bakal gagal dengan pesan git standar
+ * (rejected non-fast-forward), operator perlu pull/rebase dulu manual.
+ */
+router.post('/:name/push', (req, res) => {
+  const ACTION = 'git.push';
+  const policy = commandPolicy.getPolicy(ACTION);
+  if (!policy) {
+    return res.status(403).json({ success: false, message: 'Action belum diizinkan.', code: 'ACTION_NOT_ALLOWED' });
+  }
+  const project = resolveProject(req, res);
+  if (!project) return;
+
+  const { confirm, accountLabel } = req.body || {};
+  if (policy.confirmRequired && confirm !== true) {
+    return res.status(400).json({
+      success: false,
+      message: `Ini akan ngirim commit lokal project "${project.name}" ke remote GitHub - ngubah history yang orang lain lihat di sana. Kirim ulang dengan { "confirm": true } di body kalau yakin.`,
+      code: 'CONFIRM_REQUIRED',
+    });
+  }
+
+  let account = null;
+  if (accountLabel) {
+    account = config.listGithubAccounts().find((a) => a.label === accountLabel) || null;
+    if (!account) {
+      return res.status(400).json({ success: false, message: `Akun GitHub dengan label "${accountLabel}" tidak ditemukan di Configuration.`, code: 'ACCOUNT_NOT_FOUND' });
+    }
+  }
+
+  const startedAt = Date.now();
+  const auditId = audit.recordStart({ action: ACTION, ip: req.ip, params: { name: project.name, accountLabel } });
+
+  const result = git.push(project.path, project.deploy_user, account);
+  audit.recordEnd(auditId, { success: result.ok, message: result.errorMessage || result.output || 'OK', durationMs: Date.now() - startedAt });
+
+  if (!result.ok) {
+    return res.status(400).json({ success: false, message: result.errorMessage, code: 'GIT_PUSH_FAILED' });
+  }
+  res.json({ success: true, message: 'Push berhasil.', data: { output: result.output } });
+});
+
+/**
  * Checkout branch. `branch` WAJIB lolos `isValidBranch()` di atas.
  */
 router.post('/:name/checkout', (req, res) => {

@@ -3,6 +3,25 @@
 Changelog lama dihapus & mulai dari sini lagi sesuai permintaan. Riwayat fase
 sebelumnya masih ada di histori chat kalau sewaktu-waktu dibutuhkan.
 
+## Fase - Git Push, Installer Backend, Ownership Self-Heal (2026-08-21)
+
+### Added (Git Push - baru, backend + mobile)
+- **`src/git/git.js`** `push()` (BARU): fungsi push, pola sama persis kayak
+  `pull()` (auth sementara pakai akun GitHub kalau dikasih, balikin ke URL
+  bersih abis selesai - sukses ATAU gagal). Sengaja gak pernah pakai
+  `--force` - kalau remote udah maju duluan, gagal dengan pesan git standar
+  (rejected), bukan ke-timpa diam-diam.
+- **`src/api/routes/git.routes.js`** `POST /:name/push` (BARU): route baru,
+  wajib `{ confirm: true }` di body (lihat commandPolicy.js) - beda dari
+  `/pull` yang gak perlu confirm, karena efek Push KELUAR dari VPS (ngubah
+  history yang orang lain lihat di GitHub).
+- **`src/api/commandPolicy.js`**: entry `git.push` (`confirmRequired: true`).
+- **`vps-mobile/lib/api.ts`** `gitPush()` (BARU), **`vps-mobile/components/PmAppCard.tsx`**:
+  tombol "Git" di kartu app Dashboard sekarang buka action sheet (Pull/Push/
+  Stash/Buka Detail) - 3 aksi tersering langsung dari Dashboard tanpa perlu
+  buka halaman detail Git dulu. Push dikonfirmasi 2x (dialog + server-side)
+  karena efeknya paling berisiko dari ketiganya.
+
 ## Fase - Auto Installer multi-server, Wildcard SSL, Database Manager, shell EACCES (2026-08-20)
 
 ### Fixed
@@ -57,6 +76,37 @@ sebelumnya masih ada di histori chat kalau sewaktu-waktu dibutuhkan.
   butuh cwd spesifik (git, npm, prisma - lewat git.js/build.js/deployNew.js)
   semua sudah kasih opsi `cwd` eksplisit, jadi perubahan ini gak
   mempengaruhi fitur lain.
+
+### Added (arsitektur baru: installer pindah ke backend)
+- **`bin/vps-bootstrap.js`** (BARU): orchestrator Node yang jalan LANGSUNG
+  DI SERVER, manggil module Node yang SAMA dipakai REST API/CLI menu
+  (`database.js`, `nginx.js`, `ssl.js`, `registry.js`) - BUKAN reimplementasi
+  command mentah lewat SSH kayak `installFlow.ts` (mobile) yang lama.
+  Alasannya: instalasi lewat SSH dari HP rapuh (state ilang kalau app
+  navigasi tab, gak resumable beneran) DAN gampang bikin logic duplikat yang
+  divergen dari codebase utama (persis kejadian bug "IDENTIFIED WITH
+  mysql_native_password BY" yang cuma kefix di satu tempat). Sekarang satu
+  sumber kebenaran - fix di `database.js`/`nginx.js`/`ssl.js` otomatis
+  kepakai installer juga. Tahapan: setup database -> generate & TAMPILKAN
+  API key jelas di terminal -> PM2 start + **boot persistence** (`pm2
+  startup`, gap yang sebelumnya gak pernah ada sama sekali di installer
+  manapun - VPS reboot = semua project mati sampai ada yang manual jalanin
+  `pm2 resurrect`) -> daftar ke registry -> setup nginx -> terbitkan SSL.
+  Idempotent penuh, aman dijalankan ulang kalau gagal di tengah.
+- **`src/database/database.js`** `setupRootDatabase()` (BARU): logic
+  install+secure+verify MariaDB root, diextract jadi function reusable -
+  dipakai `vps-bootstrap.js`, tapi juga siap dipanggil ulang dari CLI/API
+  kapan pun kalau perlu re-setup/repair, tanpa duplikat logic.
+- **`scripts/install.sh`** (BARU): installer bash one-shot
+  (`sudo bash scripts/install.sh`), CUMA ngurus level OS (apt install
+  nginx/certbot/nodejs/ufw/fail2ban, buka firewall 22/80/443, buat deploy
+  user, clone repo, npm install+link, jalanin setup-sudoers.sh) - sisanya
+  diserahin ke `vps-bootstrap.js`. Idempotent, bisa full non-interaktif
+  lewat env var (`INSTALL_DOMAIN`, `INSTALL_DEPLOY_USER`, dll) buat
+  automation.
+- **`package.json`**: tambah bin `vps-bootstrap` dan script `npm run
+  bootstrap`, konsisten sama `vps-manager`/`vps-api`/`vps-api-keygen` yang
+  udah ada.
 
 ### Added
 - **`src/menu/mainMenu.js`**: menu baru **"Ganti Password Root DB"** di
