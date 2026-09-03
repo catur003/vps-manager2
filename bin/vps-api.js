@@ -4,6 +4,7 @@ const { createServer } = require('../src/api/server');
 const config = require('../src/config/config');
 const logger = require('../src/utils/logger');
 const { attachTerminalServer } = require('../src/api/terminal');
+const { attachDockerExecServer } = require('../src/api/dockerExec');
 
 const cfg = config.loadConfig();
 const port = (cfg.api && cfg.api.port) || 4001;
@@ -24,3 +25,4 @@ const httpServer = app.listen(port, '127.0.0.1', () => {
   logger.info('Buat diakses dari luar: pasang reverse proxy + SSL lewat Nginx Manager, JANGAN expose port ini langsung.');
 });
 attachTerminalServer(httpServer);
+attachDockerExecServer(httpServer);

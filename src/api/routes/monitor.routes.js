@@ -1,6 +1,7 @@
 const fs = require('fs');
 const express = require('express');
 const monitor = require('../../monitor/monitor');
+const bandwidth = require('../../monitor/bandwidth');
 const audit = require('../audit');
 const commandPolicy = require('../commandPolicy');
 
@@ -24,6 +25,23 @@ router.get('/', (req, res) => {
   } catch (err) {
     audit.recordEnd(auditId, { success: false, message: err.message, durationMs: Date.now() - startedAt });
     res.status(500).json({ success: false, message: 'Gagal ambil status server.', code: 'MONITOR_FAILED' });
+  }
+});
+
+router.get('/bandwidth', (req, res) => {
+  const BW_ACTION = 'monitor.bandwidth';
+  if (!commandPolicy.isExposed(BW_ACTION)) {
+    return res.status(403).json({ success: false, message: 'Action belum diizinkan.', code: 'ACTION_NOT_ALLOWED' });
+  }
+  const startedAt = Date.now();
+  const auditId = audit.recordStart({ action: BW_ACTION, ip: req.ip, params: {} });
+  try {
+    const summary = bandwidth.getSummary();
+    audit.recordEnd(auditId, { success: true, message: 'OK', durationMs: Date.now() - startedAt });
+    res.json({ success: true, message: 'OK', data: summary });
+  } catch (err) {
+    audit.recordEnd(auditId, { success: false, message: err.message, durationMs: Date.now() - startedAt });
+    res.status(500).json({ success: false, message: 'Gagal ambil data bandwidth.', code: 'BANDWIDTH_FAILED' });
   }
 });
 

@@ -51,6 +51,14 @@ router.post('/github/:projectName', async (req, res) => {
   if (!project) {
     return res.status(404).json({ success: false, message: `Project "${req.params.projectName}" tidak ditemukan di registry.`, code: 'PROJECT_NOT_FOUND' });
   }
+  // Opt-in eksplisit per project (default OFF) - signature HMAC valid doang
+  // BELUM cukup buat auto-deploy project yang webhook-nya emang belum
+  // sengaja diaktifkan dari dashboard (mis. project lama yang gak pernah
+  // di-setup webhook-nya, tapi attacker entah gimana tau webhook_secret-nya
+  // bocor - toggle ini lapisan kedua, bukan gantiin signature check).
+  if (!project.webhook_enabled) {
+    return res.status(403).json({ success: false, message: `Webhook belum diaktifkan untuk project "${project.name}" - aktifkan dulu dari halaman Deployments.`, code: 'WEBHOOK_NOT_ENABLED' });
+  }
 
   // Balas GitHub SEGERA (GitHub kasih timeout ~10 detik ke webhook, sedangkan
   // pull+install+build bisa jauh lebih lama) - proses lanjut di background,

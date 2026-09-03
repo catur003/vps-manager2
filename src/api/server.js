@@ -32,9 +32,12 @@ const aiRoutes = require('./routes/ai.routes');
 const notificationsRoutes = require('./routes/notifications.routes');
 const cronRoutes = require('./routes/cron.routes');
 const webhookRoutes = require('./routes/webhook.routes');
+const cloudflareRoutes = require('./routes/cloudflare.routes');
 const config = require('../config/config');
 const ssl = require('../ssl/ssl');
 const notify = require('../notify/notify');
+const alerting = require('../monitor/alerting');
+const bandwidth = require('../monitor/bandwidth');
 
 const SSL_RENEW_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // cek 1x/hari - certbot sendiri cuma beneran renew kalau <30 hari lagi, jadi aman dicek sesering ini
 
@@ -62,6 +65,8 @@ function createServer() {
   // supaya client polling gak nunggu status yang gak bakal pernah berubah.
   jobStore.reconcileInterruptedJobs();
   scheduleSslAutoRenew();
+  alerting.scheduleAlerting();
+  bandwidth.scheduleBandwidthSampler();
 
   const app = express();
   // Trust cuma koneksi dari localhost (nginx reverse proxy di depan API ini
@@ -148,6 +153,7 @@ function createServer() {
   app.use('/ai', aiRoutes);
   app.use('/notifications', notificationsRoutes);
   app.use('/cron', cronRoutes);
+  app.use('/cloudflare', cloudflareRoutes);
 
   app.use((req, res) => {
     res.status(404).json({ success: false, message: 'Endpoint tidak ditemukan.', code: 'NOT_FOUND' });

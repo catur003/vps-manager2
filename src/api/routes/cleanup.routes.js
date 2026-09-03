@@ -1,8 +1,11 @@
 const express = require('express');
 const cleanup = require('../../cleanup/cleanup');
+const systemCleanup = require('../../cleanup/systemCleanup');
 const pm2 = require('../../pm2/pm2');
 const audit = require('../audit');
 const commandPolicy = require('../commandPolicy');
+
+const SYSTEM_CLEANUP_KEYS = ['npm_cache', 'apt_cache', 'docker_prune', 'journal'];
 
 const router = express.Router();
 
@@ -143,6 +146,52 @@ router.post('/delete', (req, res) => {
     return res.status(400).json({ success: false, message: result.errorMessage, code: 'CLEANUP_DELETE_FAILED' });
   }
   res.json({ success: true, message: `"${targetPath}" berhasil dihapus.` });
+});
+
+/**
+ * Scan cache LEVEL SISTEM (npm cache semua user, APT archives, Docker image/
+ * build cache reclaimable, systemd journal) - beda dari scan/user &
+ * scan/projects di atas yang scope-nya per-user/per-project. Read-only.
+ */
+router.get('/scan/system', (req, res) => {
+  const ACTION = 'cleanup.scanSystem';
+  if (!guard(ACTION, res)) return;
+
+  const startedAt = Date.now();
+  const auditId = audit.recordStart({ action: ACTION, ip: req.ip, params: {} });
+  const result = systemCleanup.scanAll();
+  audit.recordEnd(auditId, { success: true, message: 'OK', durationMs: Date.now() - startedAt });
+
+  res.json({ success: true, message: 'OK', data: result });
+});
+
+/**
+ * Bersihin 1 kategori cache sistem (`npm_cache`/`apt_cache`/`docker_prune`/
+ * `journal`). Semua kategori di sini SELALU regenerable otomatis oleh tool
+ * masing-masing (npm/apt/docker/journald), tapi tetap WAJIB confirm:true
+ * karena efeknya baru kerasa (mis. app harus re-download dependency) - bukan
+ * instan reversible kayak toggle biasa.
+ */
+router.post('/clean/system', (req, res) => {
+  const ACTION = 'cleanup.cleanSystem';
+  const policy = commandPolicy.getPolicy(ACTION);
+  if (!policy) return res.status(403).json({ success: false, message: 'Action belum diizinkan.', code: 'ACTION_NOT_ALLOWED' });
+
+  const { key, confirm } = req.body || {};
+  if (!key || !SYSTEM_CLEANUP_KEYS.includes(key)) {
+    return res.status(400).json({ success: false, message: `key wajib salah satu dari: ${SYSTEM_CLEANUP_KEYS.join(', ')}.`, code: 'INVALID_INPUT' });
+  }
+  if (policy.confirmRequired && confirm !== true) {
+    return res.status(400).json({ success: false, message: 'Kirim ulang dengan { "confirm": true } untuk membersihkan kategori ini.', code: 'CONFIRM_REQUIRED' });
+  }
+
+  const startedAt = Date.now();
+  const auditId = audit.recordStart({ action: ACTION, ip: req.ip, params: { key } });
+  const result = systemCleanup.cleanCategory(key);
+  audit.recordEnd(auditId, { success: result.ok, message: result.errorMessage || 'OK', durationMs: Date.now() - startedAt });
+
+  if (!result.ok) return res.status(400).json({ success: false, message: result.errorMessage, code: 'CLEAN_SYSTEM_FAILED' });
+  res.json({ success: true, message: 'Kategori berhasil dibersihkan.' });
 });
 
 module.exports = router;

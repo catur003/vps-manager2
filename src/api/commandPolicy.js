@@ -131,6 +131,7 @@ const POLICY = {
 
   // --- Cron Jobs ---
   'cron.list': { confirmRequired: false, auditLevel: 'read' },
+  'cron.history': { confirmRequired: false, auditLevel: 'read' },
   'cron.add': { confirmRequired: false, auditLevel: 'write' },
   'cron.update': { confirmRequired: false, auditLevel: 'write' },
   'cron.toggle': { confirmRequired: false, auditLevel: 'write' },
@@ -157,6 +158,11 @@ const POLICY = {
 
   // --- Manual redeploy (tombol "Pull & Redeploy") ---
   'project.redeploy': { confirmRequired: false, auditLevel: 'write' },
+  'project.rollback': { confirmRequired: true, auditLevel: 'write' },
+  'project.webhookToggle': { confirmRequired: false, auditLevel: 'write' },
+  'monitor.bandwidth': { confirmRequired: false, auditLevel: 'read' },
+  'cloudflare.purgeCache': { confirmRequired: false, auditLevel: 'write' },
+  'cloudflare.underAttack': { confirmRequired: false, auditLevel: 'write' },
 
   // --- Nginx ---
   'nginx.listSites': { confirmRequired: false, auditLevel: 'read' },
@@ -272,6 +278,8 @@ const POLICY = {
   'cleanup.scanProjectCaches': { confirmRequired: false, auditLevel: 'read' },
   // Hapus cache/file (rm -rf) - permanen, gak ada undo. WAJIB confirm:true.
   'cleanup.deletePath': { confirmRequired: true, auditLevel: 'write' },
+  'cleanup.scanSystem': { confirmRequired: false, auditLevel: 'read' },
+  'cleanup.cleanSystem': { confirmRequired: true, auditLevel: 'write' },
 
   // --- Project (env & delete) ---
   'project.readEnv': { confirmRequired: false, auditLevel: 'read' },

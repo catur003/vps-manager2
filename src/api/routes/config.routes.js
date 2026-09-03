@@ -35,6 +35,7 @@ const EDITABLE_FIELDS = [
   'ai_model',
   'ai_model_filter',
   'additional_pm2_users',
+  'cloudflare_api_token',
 ];
 
 function guard(action, res) {
@@ -56,6 +57,7 @@ function maskConfig(cfg) {
     telegram_bot_token: telegramBotToken,
     webhook_secret: webhookSecret,
     ai_api_key: aiApiKey,
+    cloudflare_api_token: cloudflareApiToken,
     api,
     github_accounts: githubAccounts,
     ...rest
@@ -66,6 +68,7 @@ function maskConfig(cfg) {
     hasTelegramBotToken: Boolean(telegramBotToken),
     hasWebhookSecret: Boolean(webhookSecret),
     hasAiApiKey: Boolean(aiApiKey),
+    hasCloudflareApiToken: Boolean(cloudflareApiToken),
     api: { port: api?.port },
     githubAccountsCount: (githubAccounts || []).length,
   };

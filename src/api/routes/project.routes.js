@@ -7,6 +7,7 @@ const audit = require('../audit');
 const commandPolicy = require('../commandPolicy');
 const { validateName } = require('../../menu/helpers');
 const redeploy = require('../../deploy/redeploy');
+const rollback = require('../../deploy/rollback');
 const jobStore = require('../jobs/jobStore');
 
 const router = express.Router();
@@ -180,6 +181,66 @@ router.post('/:name/redeploy', (req, res) => {
 
   res.status(202).json({ success: true, message: 'Redeploy dimulai di background.', data: { jobId } });
   redeploy.runRedeploy(project, jobId, { triggeredBy: 'manual' });
+});
+
+/**
+ * POST /project/:name/rollback - balikin project ke commit deploy
+ * SEBELUMNYA (`previousCommit`, ditulis otomatis tiap redeploy sukses).
+ * WAJIB confirm:true - ini checkout+rebuild+restart, dampaknya sama besar
+ * kayak redeploy (bedanya arah, mundur bukan maju), gak instant-reversible.
+ */
+router.post('/:name/rollback', (req, res) => {
+  const ACTION = 'project.rollback';
+  const policy = commandPolicy.getPolicy(ACTION);
+  if (!policy) return res.status(403).json({ success: false, message: 'Action belum diizinkan.', code: 'ACTION_NOT_ALLOWED' });
+  const { name } = req.params;
+  const check = validateName(name);
+  if (check !== true) return res.status(400).json({ success: false, message: check, code: 'INVALID_INPUT' });
+
+  const project = registry.findProject(name);
+  if (!project) {
+    return res.status(404).json({ success: false, message: `Project "${name}" tidak ditemukan di registry.`, code: 'PROJECT_NOT_FOUND' });
+  }
+  if (!project.previousCommit) {
+    return res.status(400).json({ success: false, message: `"${name}" belum punya history deploy sebelumnya buat di-rollback.`, code: 'NO_ROLLBACK_TARGET' });
+  }
+  if (policy.confirmRequired && req.body?.confirm !== true) {
+    return res.status(400).json({ success: false, message: `Kirim ulang dengan { "confirm": true } untuk rollback "${name}" ke commit ${project.previousCommit.slice(0, 8)}.`, code: 'CONFIRM_REQUIRED' });
+  }
+
+  const startedAt = Date.now();
+  const auditId = audit.recordStart({ action: ACTION, ip: req.ip, params: { name, targetCommit: project.previousCommit } });
+  const jobId = jobStore.createJob('rollback', { name: project.name });
+  audit.recordEnd(auditId, { success: true, message: `Job ${jobId} dibuat.`, durationMs: Date.now() - startedAt });
+
+  res.status(202).json({ success: true, message: 'Rollback dimulai di background.', data: { jobId } });
+  rollback.runRollback(project, jobId);
+});
+
+/**
+ * PATCH /project/:name/webhook - toggle on/off auto-deploy via webhook
+ * GitHub buat project ini (opt-in per project, lihat catatan di
+ * webhook.routes.js soal alasannya default OFF).
+ */
+router.patch('/:name/webhook', (req, res) => {
+  const ACTION = 'project.webhookToggle';
+  if (!guard(ACTION, res)) return;
+  const { name } = req.params;
+  const check = validateName(name);
+  if (check !== true) return res.status(400).json({ success: false, message: check, code: 'INVALID_INPUT' });
+
+  const project = registry.findProject(name);
+  if (!project) {
+    return res.status(404).json({ success: false, message: `Project "${name}" tidak ditemukan di registry.`, code: 'PROJECT_NOT_FOUND' });
+  }
+  const enabled = req.body?.enabled === true;
+
+  const startedAt = Date.now();
+  const auditId = audit.recordStart({ action: ACTION, ip: req.ip, params: { name, enabled } });
+  registry.updateProject(name, { webhook_enabled: enabled });
+  audit.recordEnd(auditId, { success: true, message: 'OK', durationMs: Date.now() - startedAt });
+
+  res.json({ success: true, message: `Webhook untuk "${name}" ${enabled ? 'diaktifkan' : 'dinonaktifkan'}.` });
 });
 
 module.exports = router;

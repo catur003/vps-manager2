@@ -42,6 +42,8 @@ router.get('/projects', (req, res) => {
     aliases: p.aliases || [],
     port: p.port || null,
     folder_path: p.folder_path || null,
+    previousCommit: p.previousCommit || null,
+    webhook_enabled: !!p.webhook_enabled,
   }));
   res.json({ success: true, message: 'OK', data: projects });
 });

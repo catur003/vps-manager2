@@ -24,7 +24,28 @@ router.get('/', (req, res) => {
   const user = resolveUser(req);
   const result = cron.list(user);
   if (!result.ok) return res.status(400).json({ success: false, message: result.errorMessage, code: 'CRON_LIST_FAILED' });
-  res.json({ success: true, message: 'OK', data: { user, entries: result.entries } });
+
+  const lastRuns = cron.getLastRuns(user);
+  const entries = result.entries.map((entry) => ({
+    ...entry,
+    lastRun: entry.jobId ? lastRuns[entry.jobId] || null : null,
+  }));
+  res.json({ success: true, message: 'OK', data: { user, entries } });
+});
+
+router.get('/:index/history', (req, res) => {
+  const ACTION = 'cron.history';
+  if (!guard(ACTION, res)) return;
+  const user = resolveUser(req);
+  const index = parseInt(req.params.index, 10);
+  const listResult = cron.list(user);
+  if (!listResult.ok) return res.status(400).json({ success: false, message: listResult.errorMessage, code: 'CRON_LIST_FAILED' });
+  const entry = listResult.entries.find((e) => e.index === index);
+  if (!entry) return res.status(404).json({ success: false, message: 'Cron job tidak ditemukan.', code: 'CRON_NOT_FOUND' });
+  if (!entry.jobId) return res.json({ success: true, message: 'OK', data: { runs: [] } });
+
+  const result = cron.getHistory(user, entry.jobId, 20);
+  res.json({ success: true, message: 'OK', data: { runs: result.runs } });
 });
 
 router.post('/', (req, res) => {

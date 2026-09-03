@@ -11,6 +11,8 @@ data/jobs.json
 data/db-registry.json
 data/registry.json
 data/.secret.key
+data/alert-state.json
+data/bandwidth-history.json
 
 # Logs
 *.log

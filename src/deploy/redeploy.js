@@ -4,6 +4,7 @@ const build = require('../build/build');
 const pm2 = require('../pm2/pm2');
 const notify = require('../notify/notify');
 const jobStore = require('../api/jobs/jobStore');
+const registry = require('../registry/registry');
 
 /**
  * Pull + install + build + restart 1 project yang SUDAH ada (bukan deploy
@@ -17,6 +18,12 @@ async function runRedeploy(project, jobId, { triggeredBy = 'manual' } = {}) {
 
   try {
     jobStore.updateJob(jobId, { status: 'running', message: `Redeploy "${project.name}" (${triggeredBy})...` });
+
+    // Catat commit SEBELUM pull - ini yang jadi target "Rollback" kalau
+    // deploy setelah ini ternyata rusak (lihat src/deploy/rollback.js).
+    // Diambil di awal (bukan dari field registry yang mungkin basi kalau
+    // history sebelumnya gagal ditulis) biar selalu akurat.
+    const commitBeforePull = git.getHead(project.path, deployUser);
 
     const pullResult = git.pull(project.path, deployUser);
     report('git_pull', pullResult.ok, pullResult.ok ? pullResult.output : pullResult.errorMessage);
@@ -33,6 +40,21 @@ async function runRedeploy(project, jobId, { triggeredBy = 'manual' } = {}) {
     const restartResult = pm2.restart(project.name, deployUser);
     report('pm2_restart', restartResult.ok, restartResult.ok ? 'OK' : restartResult.errorMessage);
     if (!restartResult.ok) throw new Error(`PM2 restart gagal: ${restartResult.errorMessage}`);
+
+    // Simpan commit sebelum pull sebagai "previousCommit" (target rollback)
+    // HANYA kalau beda dari commit baru - kalau `git pull` gak ngubah apa-apa
+    // (udah paling baru), jangan timpa previousCommit yang valid dgn commit
+    // yang sama (bikin rollback jadi no-op/percuma).
+    const commitAfterPull = git.getHead(project.path, deployUser);
+    if (commitBeforePull && commitAfterPull && commitBeforePull !== commitAfterPull) {
+      try {
+        registry.updateProject(project.name, { previousCommit: commitBeforePull, currentCommit: commitAfterPull });
+      } catch (err) {
+        // project mungkin bukan project ter-registrasi (mis. dipanggil dari
+        // konteks lain) - gak fatal, rollback based on commit history cuma
+        // gak akan tersedia buat project ini.
+      }
+    }
 
     jobStore.updateJob(jobId, { status: 'success', message: `Redeploy "${project.name}" berhasil (${triggeredBy}).` });
     await notify.notify(`✅ Redeploy berhasil: "${project.name}" (${triggeredBy})`);

@@ -52,6 +52,11 @@ const DEFAULT_CONFIG = {
   // menerima password biasa buat operasi git via HTTPS). Disimpan di file
   // config.json yang sama (permission 600, lihat ensureConfigFile()).
   github_accounts: [],
+  // API Token Cloudflare (scoped ke Zone:Cache Purge + Zone:Firewall Services
+  // Edit, dibuat manual di Cloudflare dashboard) - dipakai fitur purge cache
+  // & toggle Under Attack Mode per domain dari halaman Domains. `null` =
+  // belum di-setup, fitur ini nolak jalan sampai diisi lewat Settings.
+  cloudflare_api_token: null,
 };
 
 function ensureConfigFile() {
