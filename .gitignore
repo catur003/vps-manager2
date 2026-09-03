@@ -30,3 +30,4 @@ yarn-error.*
 # Backup database
 *.sql
 *.sql.gz
+graphify-out/
