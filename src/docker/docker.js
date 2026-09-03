@@ -12,6 +12,9 @@ function isValidContainerName(name) {
  * `docker ps`/`docker ps -a` doang.
  */
 function listContainers() {
+  if (!shell.commandExists('docker')) {
+    return { ok: false, containers: [], notInstalled: true, errorMessage: 'Docker belum terinstall di server ini. Install dulu lewat halaman Tools / Installer.' };
+  }
   const format = '{{.ID}}|{{.Image}}|{{.Names}}|{{.Status}}|{{.Ports}}|{{.RunningFor}}';
   const result = shell.runArgs('sudo', ['docker', 'ps', '-a', '--format', format], { silent: true });
   if (!result.ok) return { ok: false, containers: [], errorMessage: result.errorMessage };
@@ -134,8 +137,44 @@ function getStats() {
   return { ok: true, stats };
 }
 
+/**
+ * Detail 1 container - dipakai info bar halaman Docker Exec (working dir,
+ * user, env vars, mounts, network) - beda dari getStats() (cuma CPU/mem).
+ */
+function inspectContainer(name) {
+  if (!isValidContainerName(name)) return { ok: false, errorMessage: 'Nama container tidak valid.' };
+  const result = shell.runArgs('sudo', ['docker', 'inspect', name], { silent: true });
+  if (!result.ok) return { ok: false, errorMessage: result.errorMessage };
+  try {
+    const [data] = JSON.parse(result.output);
+    return {
+      ok: true,
+      image: data.Config.Image,
+      workingDir: data.Config.WorkingDir || '/',
+      user: data.Config.User || 'root',
+      // Value yang namanya kecium sensitif (password/token/secret/key)
+      // di-redact - ini ditampilin ke UI (bukan cuma log internal), gak
+      // boleh jadi cara baru buat nge-leak credential app.
+      env: (data.Config.Env || []).map((e) => {
+        const idx = e.indexOf('=');
+        const key = e.slice(0, idx);
+        const value = /password|token|secret|key/i.test(key) ? '[REDACTED]' : e.slice(idx + 1);
+        return { key, value };
+      }),
+      mounts: (data.Mounts || []).map((m) => ({ source: m.Source, destination: m.Destination, mode: m.RW ? 'rw' : 'ro' })),
+      networks: Object.entries(data.NetworkSettings?.Networks || {}).map(([net, cfg]) => ({
+        network: net, ipAddress: cfg.IPAddress, gateway: cfg.Gateway,
+      })),
+      startedAt: data.State?.StartedAt,
+    };
+  } catch (err) {
+    return { ok: false, errorMessage: `Gagal parsing docker inspect: ${err.message}` };
+  }
+}
+
 module.exports = {
   listContainers,
+  inspectContainer,
   start,
   stop,
   restart,

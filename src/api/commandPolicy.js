@@ -162,6 +162,8 @@ const POLICY = {
   'project.webhookToggle': { confirmRequired: false, auditLevel: 'write' },
   'monitor.bandwidth': { confirmRequired: false, auditLevel: 'read' },
   'cloudflare.securityLevel': { confirmRequired: false, auditLevel: 'read' },
+  'redis.status': { confirmRequired: false, auditLevel: 'read' },
+  'docker.inspect': { confirmRequired: false, auditLevel: 'read' },
   'cloudflare.purgeCache': { confirmRequired: false, auditLevel: 'write' },
   'cloudflare.underAttack': { confirmRequired: false, auditLevel: 'write' },
 

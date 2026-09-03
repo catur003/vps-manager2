@@ -65,6 +65,9 @@ function interpretMysqlError(rawMessage) {
  * ke proses `mysql`, tidak pernah melewati parsing shell sama sekali.
  */
 function runSQL(sql, opts = {}) {
+  if (!shell.commandExists('mysql')) {
+    return { ok: false, notInstalled: true, errorMessage: 'MySQL/MariaDB belum terinstall di server ini. Install dulu lewat halaman Tools / Installer.' };
+  }
   const { user, password } = mysqlCreds();
   const args = ['-h', '127.0.0.1', '-P', '3306', '-u', user];
   if (opts.vertical) args.push('-E');
@@ -137,7 +140,7 @@ function escapeSqlString(value) {
  */
 function listDatabases() {
   const result = runSQL('SHOW DATABASES;');
-  if (!result.ok) return { ok: false, databases: [], error: result.errorMessage };
+  if (!result.ok) return { ok: false, databases: [], error: result.errorMessage, notInstalled: result.notInstalled };
 
   const systemDbs = ['Database', 'information_schema', 'mysql', 'performance_schema', 'sys'];
   const names = result.output

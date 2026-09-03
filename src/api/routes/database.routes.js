@@ -91,6 +91,9 @@ router.get('/', (req, res) => {
   const result = database.listDatabases();
   if (!result.ok) {
     audit.recordEnd(auditId, { success: false, message: result.error, durationMs: Date.now() - startedAt });
+    if (result.notInstalled) {
+      return res.json({ success: true, message: result.error, data: { databases: [], serverVersion: null, notInstalled: true } });
+    }
     return res.status(500).json({ success: false, message: result.error, code: 'LIST_DATABASES_FAILED' });
   }
 

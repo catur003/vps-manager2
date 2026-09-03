@@ -358,6 +358,7 @@
   <div class="nav-item" data-page="dockerexec" data-label="Docker Exec"><span class="nav-icon" style="color:#2596ec"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l4 3-4 3M13 15h4"/></svg></span><span class="nav-label">Docker Exec</span></div>
   <div class="nav-item" data-page="deployments" data-label="Deployments"><span class="nav-icon" style="color:#f97316"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg></span><span class="nav-label">Deployments</span></div>
   <div class="nav-item" data-page="node" data-label="Node Manager"><span class="nav-icon" style="color:#3ba55d"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4.5v11L12 22l-8-4.5v-11L12 2z"/><path d="M12 22V12M20 6.5L12 12M4 6.5L12 12"/></svg></span><span class="nav-label">Node Manager</span></div>
+  <div class="nav-item" data-page="redis" data-label="Redis"><span class="nav-icon" style="color:#dc2626"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l9 4.5v11L12 22l-9-4.5v-11L12 2z"/><path d="M12 12l9-4.5M12 12v10M12 12L3 7.5"/></svg></span><span class="nav-label">Redis</span></div>
   <div class="nav-item" data-page="database" data-label="Database"><span class="nav-icon" style="color:#06b6d4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></span><span class="nav-label">Database</span></div>
 
   <div class="nav-section-label">Infrastruktur</div>
@@ -527,6 +528,15 @@
         <div id="node-global-packages" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;max-height:260px;overflow-y:auto"><div class="empty">Memuat...</div></div>
       </section>
     </div>
+  </div>
+
+  <div class="page" id="page-redis">
+    <div class="topbar">
+      <h1>Redis Monitoring</h1>
+      <button class="secondary" onclick="refreshRedis()">↻ Refresh</button>
+    </div>
+    <p style="color:var(--ink-muted);font-size:12.5px;margin:-10px 0 16px">Real-time cache health &amp; performance monitoring.</p>
+    <div id="redis-body"><div class="empty">Memuat...</div></div>
   </div>
 
   <div class="page" id="page-database">
@@ -801,8 +811,23 @@
         <button class="secondary" onclick="connectDockerExec()">↻ Reconnect</button>
       </div>
     </div>
-    <p style="color:var(--ink-muted);font-size:12.5px;margin:-10px 0 12px">Terminal langsung ke dalam container Docker (<code>docker exec -it &lt;container&gt; sh/bash</code>). Hati-hati mengubah apapun di dalam container - perubahan filesystem container biasanya hilang kalau container di-restart/recreate.</p>
-    <div id="dockerexec-container" style="background:#0a0d12;border:1px solid var(--border);border-radius:12px;padding:10px;height:70vh"></div>
+    <p style="color:var(--ink-muted);font-size:12.5px;margin:-10px 0 12px">Terminal langsung ke dalam container Docker. Hati-hati mengubah apapun di dalam container - perubahan filesystem container biasanya hilang kalau container di-restart/recreate.</p>
+    <div id="dockerexec-infobar" class="card" style="margin-bottom:12px;display:none"></div>
+    <div style="display:grid;grid-template-columns:1fr 260px;gap:12px">
+      <div id="dockerexec-container" style="background:#0a0d12;border:1px solid var(--border);border-radius:12px;padding:10px;height:65vh"></div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="card" style="margin-bottom:0">
+          <h3 style="margin:0 0 10px;font-size:13px">Quick Commands</h3>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            ${['ls -la', 'pwd', 'env', 'whoami', 'ps aux'].map((cmd) => `<button class="secondary" style="text-align:left;font-family:monospace;font-size:11.5px" onclick="dockerExecSendCommand('${cmd}')">${cmd}</button>`).join('')}
+          </div>
+        </div>
+        <div id="dockerexec-envcard" class="card" style="margin-bottom:0;display:none">
+          <h3 style="margin:0 0 10px;font-size:13px">Environment Variables</h3>
+          <div id="dockerexec-env-list" style="font-size:11px;max-height:200px;overflow-y:auto"></div>
+        </div>
+      </div>
+    </div>
   </div>
 
 </div>
@@ -968,6 +993,7 @@ const REFRESHERS = {
   deployments: refreshDeployments,
   node: () => refreshNode(),
   database: refreshDb,
+  redis: refreshRedis,
   domains: refreshDomains,
   nginx: refreshNginx,
   backup: refreshBackups,
@@ -1359,12 +1385,22 @@ function pm2Delete(name) {
 // ---------- Docker ----------
 let dockerCache = [];
 let dockerStatsCache = {};
+function notInstalledCard(serviceName) {
+  return `<div class="empty" style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:30px">
+    <div style="font-size:13px">${serviceName} belum terinstall di server ini.</div>
+    <button onclick="gotoPage('tools')">Buka Tools / Installer</button>
+  </div>`;
+}
 async function refreshDocker() {
   try {
-    const [{ containers }, statsResult] = await Promise.all([
-      api('/docker'),
-      api('/docker/stats').catch(() => ({ stats: [] })),
-    ]);
+    const dockerData = await api('/docker');
+    if (dockerData.notInstalled) {
+      document.getElementById('docker-stats-row').innerHTML = '';
+      document.getElementById('docker-grid').innerHTML = notInstalledCard('Docker');
+      return;
+    }
+    const { containers } = dockerData;
+    const statsResult = await api('/docker/stats').catch(() => ({ stats: [] }));
     dockerCache = containers;
     dockerStatsCache = Object.fromEntries((statsResult.stats || []).map((s) => [s.name, s]));
 
@@ -2643,6 +2679,90 @@ async function refreshAppSettings() {
   refreshGithubAccounts();
 }
 
+function fmtUptime(seconds) {
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (d > 0) return `${d} hari, ${h} jam`;
+  if (h > 0) return `${h} jam, ${m} menit`;
+  return `${m} menit`;
+}
+async function refreshRedis() {
+  const body = document.getElementById('redis-body');
+  try {
+    const data = await api('/redis/status');
+    if (data.notInstalled) { body.innerHTML = notInstalledCard('Redis'); return; }
+
+    const chip = (color, path) => `<div class="stat-icon-chip" style="background:${color}22;color:${color}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${path}</svg></div>`;
+    const memPercent = data.memory.maxBytes > 0 ? Math.min(100, (data.memory.usedBytes / data.memory.maxBytes) * 100) : null;
+
+    body.innerHTML = `
+      <div class="stats-row" style="margin-bottom:16px">
+        <div class="stat-card"><div class="stat-card-head">${chip('#dc2626', '<rect x="3" y="7" width="18" height="10" rx="1"/>')}<div class="stat-label">Memory Usage</div></div><div class="stat-value">${data.memory.usedHuman}${data.memory.maxBytes > 0 ? ' / ' + data.memory.maxHuman : ''}</div>${memPercent !== null ? `<div class="stat-bar" style="margin-top:6px"><div class="stat-bar-fill" style="width:${memPercent.toFixed(0)}%"></div></div>` : ''}</div>
+        <div class="stat-card"><div class="stat-card-head">${chip('#22c55e', '<path d="M13 2L3 14h7l-1 8 11-14h-7l1-8z"/>')}<div class="stat-label">Ops / sec</div></div><div class="stat-value">${data.stats.opsPerSec.toLocaleString()}</div></div>
+        <div class="stat-card"><div class="stat-card-head">${chip('#3b82f6', '<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>')}<div class="stat-label">Hit Rate</div></div><div class="stat-value">${data.stats.hitRate !== null ? data.stats.hitRate.toFixed(2) + '%' : 'N/A'}</div></div>
+        <div class="stat-card"><div class="stat-card-head">${chip('#a855f7', '<circle cx="9" cy="7" r="4"/><path d="M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2"/>')}<div class="stat-label">Connected Clients</div></div><div class="stat-value">${data.clients.connected}</div></div>
+        <div class="stat-card"><div class="stat-card-head">${chip('#ef4444', '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>')}<div class="stat-label">Evicted Keys</div></div><div class="stat-value">${data.stats.evictedKeys.toLocaleString()}</div></div>
+      </div>
+
+      <div class="grid" style="margin-bottom:16px">
+        <div class="card">
+          <h3 style="margin:0 0 10px">Instance Status</h3>
+          <div class="kv-row"><span class="kv-label">Status</span><span class="badge ok">Running</span></div>
+          <div class="kv-row"><span class="kv-label">Redis Version</span><span>${data.server.version}</span></div>
+          <div class="kv-row"><span class="kv-label">Uptime</span><span>${fmtUptime(data.server.uptimeSeconds)}</span></div>
+          <div class="kv-row"><span class="kv-label">Mode</span><span>${data.server.mode}</span></div>
+          <div class="kv-row"><span class="kv-label">Port</span><span>${data.server.port}</span></div>
+          <div class="kv-row"><span class="kv-label">Connected Clients</span><span>${data.clients.connected} / ${data.clients.max}</span></div>
+        </div>
+        <div class="card">
+          <h3 style="margin:0 0 10px">Memory Details</h3>
+          <div class="kv-row"><span class="kv-label">Used Memory</span><span>${data.memory.usedHuman}</span></div>
+          <div class="kv-row"><span class="kv-label">Max Memory</span><span>${data.memory.maxBytes > 0 ? data.memory.maxHuman : 'unlimited'}</span></div>
+          <div class="kv-row"><span class="kv-label">Memory Policy</span><span>${data.memory.policy}</span></div>
+          <div class="kv-row"><span class="kv-label">Peak Memory</span><span>${data.memory.peakHuman}</span></div>
+          <div class="kv-row"><span class="kv-label">Fragmentation Ratio</span><span>${data.memory.fragmentationRatio}</span></div>
+          <div class="kv-row"><span class="kv-label">Evicted Keys</span><span>${data.stats.evictedKeys}</span></div>
+        </div>
+        <div class="card">
+          <h3 style="margin:0 0 10px">Persistence</h3>
+          <div class="kv-row"><span class="kv-label">RDB Status</span><span class="badge ${data.persistence.rdbLastBgsaveStatus === 'ok' ? 'ok' : 'bad'}">${data.persistence.rdbLastBgsaveStatus}</span></div>
+          <div class="kv-row"><span class="kv-label">Changes Since Last Save</span><span>${data.persistence.rdbChangesSinceLastSave}</span></div>
+          <div class="kv-row"><span class="kv-label">AOF Status</span><span class="badge ${data.persistence.aofEnabled ? 'ok' : ''}">${data.persistence.aofEnabled ? 'Enabled' : 'Disabled'}</span></div>
+          ${data.persistence.aofEnabled ? `<div class="kv-row"><span class="kv-label">AOF Last Write</span><span class="badge ${data.persistence.aofLastWriteStatus === 'ok' ? 'ok' : 'bad'}">${data.persistence.aofLastWriteStatus}</span></div>` : ''}
+        </div>
+        <div class="card">
+          <h3 style="margin:0 0 10px">Replication</h3>
+          <div class="kv-row"><span class="kv-label">Role</span><span class="badge ok">${data.replication.role}</span></div>
+          <div class="kv-row"><span class="kv-label">Connected Slaves</span><span>${data.replication.connectedSlaves}</span></div>
+          <div class="kv-row"><span class="kv-label">Repl Offset</span><span>${data.replication.masterReplOffset}</span></div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <h3 style="margin:0 0 10px">Top Commands</h3>
+          ${data.topCommands.length ? `
+            <table style="width:100%;font-size:12px">
+              <thead><tr style="text-align:left;color:var(--ink-muted)"><th>Command</th><th style="text-align:right">Calls</th></tr></thead>
+              <tbody>${data.topCommands.map((c) => `<tr><td style="padding:3px 0">${c.command}</td><td style="text-align:right">${c.calls.toLocaleString()}</td></tr>`).join('')}</tbody>
+            </table>
+          ` : '<div class="empty">Belum ada command tercatat.</div>'}
+        </div>
+        <div class="card">
+          <h3 style="margin:0 0 10px">Keyspace Overview</h3>
+          ${data.keyspace.length ? `
+            <table style="width:100%;font-size:12px">
+              <thead><tr style="text-align:left;color:var(--ink-muted)"><th>DB</th><th>Keys</th><th>Expires</th><th>Avg TTL</th></tr></thead>
+              <tbody>${data.keyspace.map((k) => `<tr><td style="padding:3px 0">db${k.db}</td><td>${k.keys}</td><td>${k.expires}</td><td>${k.avgTtl}</td></tr>`).join('')}</tbody>
+            </table>
+          ` : '<div class="empty">Belum ada data (Redis kosong).</div>'}
+        </div>
+      </div>
+    `;
+  } catch (e) { body.innerHTML = `<div class="empty">Gagal: ${e.message}</div>`; }
+}
+
 async function refreshTools() {
   const grid = document.getElementById('tools-grid');
   try {
@@ -3189,6 +3309,8 @@ function connectDockerExec() {
   dockerExecReconnectAttempt = 0;
   dockerExecManualDisconnect = false;
   box.innerHTML = '';
+  document.getElementById('dockerexec-infobar').style.display = 'none';
+  document.getElementById('dockerexec-envcard').style.display = 'none';
   if (!container) return;
 
   dockerExecInstance = new Terminal({
@@ -3207,6 +3329,41 @@ function connectDockerExec() {
   });
 
   openDockerExecSocket();
+  refreshDockerExecInfo(container);
+}
+function dockerExecSendCommand(cmd) {
+  if (!dockerExecSocket || dockerExecSocket.readyState !== WebSocket.OPEN) { toast('Belum tersambung ke container.', 'error'); return; }
+  dockerExecSocket.send(JSON.stringify({ type: 'input', data: cmd + '\n' }));
+}
+async function refreshDockerExecInfo(container) {
+  const infobar = document.getElementById('dockerexec-infobar');
+  const envCard = document.getElementById('dockerexec-envcard');
+  try {
+    const [inspect, statsResult] = await Promise.all([
+      api(`/docker/${encodeURIComponent(container)}/inspect`),
+      api('/docker/stats').catch(() => ({ stats: [] })),
+    ]);
+    const stat = (statsResult.stats || []).find((s) => s.name === container);
+    infobar.style.display = 'block';
+    infobar.innerHTML = `
+      <div style="display:flex;flex-wrap:wrap;gap:24px;font-size:12px">
+        <div><div style="color:var(--ink-muted);font-size:10.5px;text-transform:uppercase">Container</div><div style="font-weight:600">${container}</div></div>
+        <div><div style="color:var(--ink-muted);font-size:10.5px;text-transform:uppercase">Image</div><div>${inspect.image}</div></div>
+        <div><div style="color:var(--ink-muted);font-size:10.5px;text-transform:uppercase">Working Dir</div><div>${inspect.workingDir}</div></div>
+        <div><div style="color:var(--ink-muted);font-size:10.5px;text-transform:uppercase">User</div><div>${inspect.user}</div></div>
+        ${stat ? `<div><div style="color:var(--ink-muted);font-size:10.5px;text-transform:uppercase">CPU</div><div>${stat.cpuPercent}%</div></div><div><div style="color:var(--ink-muted);font-size:10.5px;text-transform:uppercase">Memory</div><div>${stat.memUsage}</div></div>` : ''}
+      </div>
+    `;
+    if (inspect.env.length) {
+      envCard.style.display = 'block';
+      document.getElementById('dockerexec-env-list').innerHTML = inspect.env.map((e) => `<div style="padding:2px 0;border-bottom:1px solid var(--border);word-break:break-all"><b>${e.key}</b>=${e.value}</div>`).join('');
+    } else {
+      envCard.style.display = 'none';
+    }
+  } catch (e) {
+    infobar.style.display = 'block';
+    infobar.innerHTML = `<div class="empty">Gagal ambil info container: ${e.message}</div>`;
+  }
 }
 
 function openDockerExecSocket() {
@@ -3464,7 +3621,13 @@ function fmtDbSize(bytes) {
 let dbCache = [];
 async function refreshDb() {
   try {
-    const { databases, serverVersion } = await api('/database');
+    const dbData = await api('/database');
+    if (dbData.notInstalled) {
+      document.getElementById('db-stats-row').innerHTML = '';
+      document.getElementById('db-grid').innerHTML = notInstalledCard('MySQL/MariaDB');
+      return;
+    }
+    const { databases, serverVersion } = dbData;
     dbCache = databases || [];
     const chip = (color, path) => `<div class="stat-icon-chip" style="background:${color}22;color:${color}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${path}</svg></div>`;
     const totalSize = dbCache.reduce((sum, db) => sum + (db.sizeBytes || 0), 0);

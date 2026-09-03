@@ -36,7 +36,12 @@ router.get('/', (req, res) => {
   audit.recordEnd(auditId, { success: result.ok, message: result.errorMessage || 'OK', durationMs: Date.now() - startedAt });
 
   if (!result.ok) {
-    return res.status(500).json({ success: false, message: result.errorMessage, code: 'DOCKER_LIST_FAILED' });
+    return res.status(result.notInstalled ? 200 : 500).json({
+      success: !!result.notInstalled,
+      message: result.errorMessage,
+      code: result.notInstalled ? 'SERVICE_NOT_INSTALLED' : 'DOCKER_LIST_FAILED',
+      data: result.notInstalled ? { containers: [], notInstalled: true } : undefined,
+    });
   }
   res.json({ success: true, message: 'OK', data: { containers: result.containers } });
 });
@@ -47,6 +52,21 @@ router.get('/stats', (req, res) => {
   const result = docker.getStats();
   if (!result.ok) return res.status(500).json({ success: false, message: result.errorMessage, code: 'DOCKER_STATS_FAILED' });
   res.json({ success: true, message: 'OK', data: { stats: result.stats } });
+});
+
+router.get('/:name/inspect', (req, res) => {
+  const ACTION = 'docker.inspect';
+  if (!guard(ACTION, res)) return;
+  const name = requireValidName(req, res);
+  if (!name) return;
+
+  const startedAt = Date.now();
+  const auditId = audit.recordStart({ action: ACTION, ip: req.ip, params: { name } });
+  const result = docker.inspectContainer(name);
+  audit.recordEnd(auditId, { success: result.ok, message: result.errorMessage || 'OK', durationMs: Date.now() - startedAt });
+
+  if (!result.ok) return res.status(400).json({ success: false, message: result.errorMessage, code: 'DOCKER_INSPECT_FAILED' });
+  res.json({ success: true, message: 'OK', data: result });
 });
 
 router.get('/:name/logs', (req, res) => {
