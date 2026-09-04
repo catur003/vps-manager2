@@ -13,12 +13,24 @@ const TOOLS = [
   { key: 'certbot-nginx', name: 'Certbot Nginx Plugin', category: 'Web Server', checkBin: null, pkg: 'python3-certbot-nginx' },
   // --- Database ---
   { key: 'mysql', name: 'MySQL Server', category: 'Database', checkBin: 'mysql', pkg: 'mysql-server' },
-  { key: 'postgresql', name: 'PostgreSQL', category: 'Database', checkBin: 'psql', pkg: 'postgresql' },
-  { key: 'redis', name: 'Redis', category: 'Database', checkBin: 'redis-cli', pkg: 'redis-server' },
+  // FIXED (laporan user: "udah hapus redis tapi status tetep terinstall"):
+  // `psql`/`checkBin` sebelumnya dari `postgresql-client-common` - package
+  // TERPISAH dari `postgresql` (pkg yang beneran di-install/remove tombol
+  // ini), gak ikut kehapus pas uninstall. `postgresql` sendiri cuma
+  // meta-package tanpa binary sendiri, jadi checkBin:null (fallback ke
+  // `dpkg -s postgresql`) yang akurat.
+  { key: 'postgresql', name: 'PostgreSQL', category: 'Database', checkBin: null, pkg: 'postgresql' },
+  // FIXED: sama kasusnya - `redis-cli` dari package `redis-tools` (dependency
+  // terpisah, gak ikut kehapus). `redis-server` binary MILIK package
+  // `redis-server` sendiri, akurat buat deteksi install/uninstall-nya.
+  { key: 'redis', name: 'Redis', category: 'Database', checkBin: 'redis-server', pkg: 'redis-server' },
   { key: 'memcached', name: 'Memcached', category: 'Database', checkBin: 'memcached', pkg: 'memcached' },
   // --- Runtime & Build ---
   { key: 'docker', name: 'Docker Engine', category: 'Runtime', checkBin: 'docker', pkg: 'docker.io' },
-  { key: 'build-essential', name: 'Build Essential (gcc/make)', category: 'Runtime', checkBin: 'make', pkg: 'build-essential' },
+  // FIXED: `make` dari package `make` sendiri (dependency terpisah dari
+  // `build-essential`, gak ikut kehapus). `build-essential` meta-package
+  // tanpa binary sendiri, checkBin:null (dpkg -s) yang akurat.
+  { key: 'build-essential', name: 'Build Essential (gcc/make)', category: 'Runtime', checkBin: null, pkg: 'build-essential' },
   { key: 'python3-pip', name: 'Python3 + pip', category: 'Runtime', checkBin: 'pip3', pkg: 'python3-pip' },
   { key: 'supervisor', name: 'Supervisor', category: 'Runtime', checkBin: 'supervisord', pkg: 'supervisor' },
   { key: 'ffmpeg', name: 'FFmpeg', category: 'Runtime', checkBin: 'ffmpeg', pkg: 'ffmpeg' },
