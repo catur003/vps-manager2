@@ -9,6 +9,8 @@ const commandPolicy = require('../commandPolicy');
 const jobStore = require('../jobs/jobStore');
 
 const router = express.Router();
+const DEPLOY_USER_REGEX = /^[a-z_][a-z0-9_-]{0,31}$/;
+const BRANCH_REGEX = /^[a-zA-Z0-9._/-]+$/;
 const WORKER_PATH = path.join(__dirname, '..', 'jobs', 'composeDeployWorker.js');
 const FOLDER_PATH_REGEX = /^\/[a-zA-Z0-9_\-./]+$/;
 const GIT_REPO_REGEX = /^(https?:\/\/|git@)[a-zA-Z0-9_.@:/-]+$/;
@@ -20,6 +22,8 @@ function validateBody(body) {
   if (!body.gitRepo || !GIT_REPO_REGEX.test(body.gitRepo)) return 'gitRepo wajib URL git yang valid.';
   if (!body.folderPath || !FOLDER_PATH_REGEX.test(body.folderPath)) return 'folderPath wajib absolute path.';
   if (!Number.isInteger(body.port) || body.port <= 0) return 'port wajib angka bulat positif.';
+  if (body.deployUser && (typeof body.deployUser !== "string" || !DEPLOY_USER_REGEX.test(body.deployUser))) return "deployUser tidak valid.";
+  if (body.branch && (typeof body.branch !== "string" || !BRANCH_REGEX.test(body.branch))) return "branch tidak valid.";
   return true;
 }
 

@@ -114,6 +114,17 @@ fi
 # --- 3. Install package sistem yang dibutuhin ---
 echo "--- Install package sistem ---"
 export DEBIAN_FRONTEND=noninteractive
+# MySQL dan MariaDB saling konflik di Ubuntu; jangan mulai apt transaction yang pasti gagal.
+if dpkg-query -W -f='${db:Status-Status}\n' 'mysql-server*' 2>/dev/null | grep -qx installed; then
+  echo "ERROR: MySQL sudah terinstall. Installer tidak memasang MariaDB di atas MySQL. Hapus/migrasikan MySQL dulu atau gunakan panel tanpa MariaDB." >&2
+  exit 1
+fi
+if ! dpkg-query -W -f='${db:Status-Status}' mariadb-server 2>/dev/null | grep -qx installed \
+  && command -v ss >/dev/null 2>&1 \
+  && ss -H -ltn 'sport = :3306' 2>/dev/null | grep -q .; then
+  echo "ERROR: Port 3306 sudah dipakai service/container lain. MariaDB tidak dipasang agar tidak bentrok. Stop atau migrasikan pemakai port 3306 dulu." >&2
+  exit 1
+fi
 apt-get update -y
 apt-get install -y \
   git curl ca-certificates gnupg \

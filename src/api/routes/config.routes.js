@@ -129,8 +129,6 @@ router.put('/', (req, res) => {
   if ('db_root_password' in auditParams) auditParams.db_root_password = '(redacted)';
   const auditId = audit.recordStart({ action: ACTION, ip: req.ip, params: auditParams });
 
-  const cfg = config.loadConfig();
-
   // db_root_password diganti DUA-DUANYA sekaligus: config.json DAN MariaDB
   // nyata (via ALTER USER, autentikasi pakai password LAMA dari cfg saat
   // ini). Ini nyegah desync yang pernah kejadian - config.json nyimpen
@@ -148,8 +146,7 @@ router.put('/', (req, res) => {
     }
   }
 
-  const merged = { ...cfg, ...updates };
-  config.saveConfig(merged);
+  const merged = config.mutateConfig((current) => Object.assign(current, updates));
 
   audit.recordEnd(auditId, { success: true, message: 'OK', durationMs: Date.now() - startedAt });
   res.json({ success: true, message: 'Konfigurasi disimpan.', data: maskConfig(merged) });

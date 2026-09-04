@@ -1,4 +1,4 @@
-const { execFileSync } = require('child_process');
+const { spawn } = require('child_process');
 const shell = require('../utils/shell');
 
 /**
@@ -136,11 +136,11 @@ function chmod(path, mode) {
 }
 
 /**
- * Upload: file diterima multer (memory buffer) di route, ditulis lewat
- * `sudo tee`.
+ * Upload: multer menyimpan file sementara di disk, lalu file dipindahkan
+ * lewat `sudo cp`. Isi file tidak ditampung penuh di RAM proses API.
  */
-function uploadFile(destPath, buffer) {
-  const result = shell.runArgs('sudo', ['tee', destPath], { input: buffer, silent: true, maxBuffer: 200 * 1024 * 1024 });
+function uploadFile(destPath, tempPath) {
+  const result = shell.runArgs('sudo', ['cp', '--', tempPath, destPath], { silent: true });
   if (!result.ok) return { ok: false, errorMessage: result.errorMessage };
   return { ok: true };
 }
@@ -158,12 +158,8 @@ function downloadFile(path) {
   if (size > MAX_DOWNLOAD_BYTES) {
     return { ok: false, errorMessage: `File terlalu besar buat didownload lewat panel (${(size / 1024 / 1024).toFixed(0)}MB, maks 500MB).` };
   }
-  try {
-    const buffer = execFileSync('sudo', ['cat', path], { maxBuffer: MAX_DOWNLOAD_BYTES + 1024 });
-    return { ok: true, buffer, size };
-  } catch (err) {
-    return { ok: false, errorMessage: err.stderr ? err.stderr.toString() : err.message };
-  }
+  const child = spawn('sudo', ['cat', '--', path], { stdio: ['ignore', 'pipe', 'pipe'] });
+  return { ok: true, child, stream: child.stdout, size };
 }
 
 module.exports = { listDir, readFile, writeFile, deleteEntry, rename, mkdir, chown, chmod, listSystemUsers, uploadFile, downloadFile };

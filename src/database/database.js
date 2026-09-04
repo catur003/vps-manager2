@@ -603,7 +603,7 @@ function setupRootDatabase() {
     return { ok: false, errorMessage: `MariaDB terinstall tapi gagal di-secure: ${secureResult.errorMessage}` };
   }
 
-  config.saveConfig({ ...config.loadConfig(), db_root_user: 'root', db_root_password: password });
+  config.mutateConfig((current) => Object.assign(current, { db_root_user: 'root', db_root_password: password }));
   return { ok: true, message: 'MariaDB terinstall, diamankan (anonymous user & database test dibuang), root password digenerate & disinkron ke config.' };
 }
 

@@ -756,10 +756,12 @@ Deploy app berbasis `docker-compose.yml` (auto-detect framework, mis. Laravel �
 
 Deteksi & install/uninstall paket sistem (nginx, mysql-server, redis-server, docker.io, dst — daftar tetap di kode, bukan dari input).
 
+Install memakai lock global agar dua operasi tidak berjalan bersamaan. Instalasi dibatalkan jika apt berencana menghapus paket lain, jika engine konflik (MySQL/MariaDB atau docker.io/Docker CE) masih terpasang, atau jika port service target sudah dipakai daemon/container lain.
+
 | Method | Path | Tipe | Confirm? | Keterangan |
 |---|---|---|---|---|
 | GET | `/tools` | sync | – | List semua tool + status terinstall/belum (`which`/`dpkg -s`) |
-| POST | `/tools/:key/install` | sync | – | `sudo apt-get install -y <pkg>` (pkg dari whitelist internal by key) |
+| POST | `/tools/:key/install` | sync | ✅ | `sudo apt-get install -y <pkg>` (pkg dari whitelist internal by key) |
 | POST | `/tools/:key/uninstall` | sync | ✅ | `sudo apt-get remove -y <pkg>` (bukan `purge` — config/data dibiarin) |
 
 ---

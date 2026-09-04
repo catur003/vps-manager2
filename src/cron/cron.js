@@ -1,6 +1,7 @@
 const path = require('path');
 const crypto = require('crypto');
 const shell = require('../utils/shell');
+const { withFileLock } = require('../utils/safeFile');
 
 const WRAPPER_PATH = path.join(__dirname, '..', '..', 'scripts', 'cron-wrapper.sh');
 // Regex buat kenalin baris crontab yang dibungkus wrapper kita, sekaligus
@@ -42,6 +43,22 @@ function wrapCommand(command, name) {
  * codebase ini (operasi "jadi user itu", bukan "root ngatur user itu").
  */
 
+const USERNAME_REGEX = /^[a-z_][a-z0-9_-]{0,31}$/;
+
+function isValidSystemUser(user) {
+  return typeof user === "string" && USERNAME_REGEX.test(user) && shell.runArgs("getent", ["passwd", user], { silent: true }).ok;
+}
+
+function withCronLock(user, operation) {
+  if (!isValidSystemUser(user)) return { ok: false, errorMessage: "User Linux tidak valid atau tidak ditemukan." };
+  const lockPath = path.join("/tmp", `vps-manager-cron-${user}.lock`);
+  try {
+    return withFileLock(lockPath, operation, { timeoutMs: 15000, staleMs: 60000 });
+  } catch (err) {
+    return { ok: false, errorMessage: err.message };
+  }
+}
+
 const CRON_LINE_REGEX = /^(\S+\s+\S+\s+\S+\s+\S+\s+\S+)\s+(.+)$/;
 
 /**
@@ -51,6 +68,7 @@ const CRON_LINE_REGEX = /^(\S+\s+\S+\s+\S+\s+\S+\s+\S+)\s+(.+)$/;
  * code: 1 = kosong, selain itu = error asli.
  */
 function list(user) {
+  if (!isValidSystemUser(user)) return { ok: false, errorMessage: "User Linux tidak valid atau tidak ditemukan.", entries: [] };
   const result = shell.runAsUser(user, 'crontab -l', { silent: true });
   if (!result.ok) {
     if (result.exitCode === 1) return { ok: true, entries: [] };
@@ -96,6 +114,7 @@ function list(user) {
  * biar konsisten sama cara baca crontab.
  */
 function getHistory(user, jobId, limit = 10) {
+  if (!isValidSystemUser(user)) return { ok: false, errorMessage: "User Linux tidak valid atau tidak ditemukan.", runs: [] };
   const result = shell.runAsUser(user, 'cat ~/.vps-manager-cron-history.jsonl 2>/dev/null || true', { silent: true });
   if (!result.ok) return { ok: true, runs: [] };
   const lines = result.output.split('\n').filter(Boolean);
@@ -137,7 +156,7 @@ function getRawLines(user) {
   return result.output.split('\n').filter((l, i, arr) => !(l === '' && i === arr.length - 1)); // buang trailing empty line doang
 }
 
-function add(user, schedule, command, name) {
+function addUnlocked(user, schedule, command, name) {
   if (!isValidSchedule(schedule)) {
     return { ok: false, errorMessage: 'Format jadwal cron tidak valid. Harus 5 field (menit jam tanggal bulan hari), mis. "0 2 * * *".' };
   }
@@ -151,7 +170,7 @@ function add(user, schedule, command, name) {
   return writeRawLines(user, lines);
 }
 
-function update(user, lineIndex, schedule, command, name) {
+function updateUnlocked(user, lineIndex, schedule, command, name) {
   if (!isValidSchedule(schedule)) {
     return { ok: false, errorMessage: 'Format jadwal cron tidak valid.' };
   }
@@ -176,7 +195,7 @@ function update(user, lineIndex, schedule, command, name) {
   return writeRawLines(user, lines);
 }
 
-function remove(user, lineIndex) {
+function removeUnlocked(user, lineIndex) {
   const lines = getRawLines(user);
   if (lines === null) return { ok: false, errorMessage: 'Gagal baca crontab user ini.' };
   if (lineIndex < 0 || lineIndex >= lines.length) return { ok: false, errorMessage: 'Baris cron tidak ditemukan (mungkin sudah berubah - refresh dulu).' };
@@ -189,7 +208,7 @@ function remove(user, lineIndex) {
  * (bukan comment-out polos `#`) biar gampang dibedain dari komentar biasa
  * user pas di-parse ulang di list().
  */
-function toggle(user, lineIndex) {
+function toggleUnlocked(user, lineIndex) {
   const lines = getRawLines(user);
   if (lines === null) return { ok: false, errorMessage: 'Gagal baca crontab user ini.' };
   if (lineIndex < 0 || lineIndex >= lines.length) return { ok: false, errorMessage: 'Baris cron tidak ditemukan (mungkin sudah berubah - refresh dulu).' };
@@ -204,7 +223,13 @@ function toggle(user, lineIndex) {
  * job) - dipakai GET /cron biar list dashboard langsung nunjukin kolom
  * "last run" tanpa request terpisah per job.
  */
+function add(user, schedule, command, name) { return withCronLock(user, () => addUnlocked(user, schedule, command, name)); }
+function update(user, lineIndex, schedule, command, name) { return withCronLock(user, () => updateUnlocked(user, lineIndex, schedule, command, name)); }
+function remove(user, lineIndex) { return withCronLock(user, () => removeUnlocked(user, lineIndex)); }
+function toggle(user, lineIndex) { return withCronLock(user, () => toggleUnlocked(user, lineIndex)); }
+
 function getLastRuns(user) {
+  if (!isValidSystemUser(user)) return {};
   const result = shell.runAsUser(user, 'cat ~/.vps-manager-cron-history.jsonl 2>/dev/null || true', { silent: true });
   if (!result.ok) return {};
   const lines = result.output.split('\n').filter(Boolean);

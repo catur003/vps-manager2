@@ -507,7 +507,7 @@ async function configEditCategoryMenu() {
       { type: 'input', name: 'git_branch', message: 'Git branch default:', default: cfg.git_branch },
       { type: 'number', name: 'starting_port', message: 'Starting port:', default: cfg.starting_port },
     ]);
-    config.saveConfig({ ...cfg, deploy_user, default_folder, docker_projects_dir, git_branch, starting_port });
+    config.mutateConfig((current) => Object.assign(current, { deploy_user, default_folder, docker_projects_dir, git_branch, starting_port }));
     logger.success('Konfigurasi Deploy & Git disimpan.');
   } else if (category === 'nginx') {
     logger.info(
@@ -522,14 +522,14 @@ async function configEditCategoryMenu() {
       { type: 'input', name: 'nginx_conf_dir', message: 'Folder config vhost nginx:', default: cfg.nginx_conf_dir },
       { type: 'input', name: 'nginx_log_dir', message: 'Folder log nginx:', default: cfg.nginx_log_dir },
     ]);
-    config.saveConfig({ ...cfg, nginx_user, nginx_binary, nginx_conf_dir, nginx_log_dir });
+    config.mutateConfig((current) => Object.assign(current, { nginx_user, nginx_binary, nginx_conf_dir, nginx_log_dir }));
     logger.success('Konfigurasi Nginx disimpan.');
   } else if (category === 'ssl') {
     const { certbot_webroot, certbot_email } = await inquirer.prompt([
       { type: 'input', name: 'certbot_webroot', message: 'Certbot webroot:', default: cfg.certbot_webroot },
       { type: 'input', name: 'certbot_email', message: 'Email certbot (buat notifikasi expiry):', default: cfg.certbot_email },
     ]);
-    config.saveConfig({ ...cfg, certbot_webroot, certbot_email });
+    config.mutateConfig((current) => Object.assign(current, { certbot_webroot, certbot_email }));
     logger.success('Konfigurasi SSL/Certbot disimpan.');
   } else if (category === 'database') {
     logger.info(
@@ -548,14 +548,14 @@ async function configEditCategoryMenu() {
       ]);
       db_root_password = password;
     }
-    config.saveConfig({ ...cfg, db_root_user, db_root_password });
+    config.mutateConfig((current) => Object.assign(current, { db_root_user, db_root_password }));
     logger.success('Konfigurasi Database disimpan.');
   } else if (category === 'backup') {
     const { backup_dir, backup_retention_days } = await inquirer.prompt([
       { type: 'input', name: 'backup_dir', message: 'Folder backup:', default: cfg.backup_dir },
       { type: 'number', name: 'backup_retention_days', message: 'Retensi backup (hari):', default: cfg.backup_retention_days },
     ]);
-    config.saveConfig({ ...cfg, backup_dir, backup_retention_days });
+    config.mutateConfig((current) => Object.assign(current, { backup_dir, backup_retention_days }));
     logger.success('Konfigurasi Backup disimpan.');
   } else if (category === 'runtime') {
     const runtimeDefault = cfg.runtime_default || {};
@@ -563,7 +563,7 @@ async function configEditCategoryMenu() {
       { type: 'input', name: 'node', message: 'Versi Node.js default:', default: runtimeDefault.node },
       { type: 'input', name: 'php', message: 'Versi PHP default:', default: runtimeDefault.php },
     ]);
-    config.saveConfig({ ...cfg, runtime_default: { ...runtimeDefault, node, php } });
+    config.mutateConfig((current) => { current.runtime_default = { ...(current.runtime_default || {}), node, php }; });
     logger.success('Konfigurasi Runtime Default disimpan.');
   }
 
@@ -1788,7 +1788,7 @@ async function databaseManagerMenu() {
     }
 
     const cfg = config.loadConfig();
-    config.saveConfig({ ...cfg, db_root_user: dbUser, db_root_password: password });
+    config.mutateConfig((current) => Object.assign(current, { db_root_user: dbUser, db_root_password: password }));
     logger.success(
       `✅ User "${dbUser}" berhasil dibuat dan tes koneksi sukses. Configuration otomatis di-update ` +
       `(db_root_user="${dbUser}") - semua fitur Database Manager & Backup Manager sekarang pakai user ini.`
@@ -1906,7 +1906,7 @@ async function databaseManagerMenu() {
 
     // Step 4: baru sekarang config di-update, SETELAH password baru
     // kebukti beneran kepake.
-    config.saveConfig({ ...cfg, db_root_password: newPassword });
+    config.mutateConfig((current) => { current.db_root_password = newPassword; });
     logger.success(
       `✅ Password untuk user "${cfg.db_root_user}" berhasil diganti dan Configuration sudah disinkron otomatis.`
     );

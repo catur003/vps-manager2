@@ -84,7 +84,7 @@ function createServer() {
   // verifikasi HMAC signature webhook GitHub (webhook.routes.js), karena
   // signature-nya dihitung dari byte mentah body, bukan dari objek hasil
   // JSON.parse (urutan key/whitespace beda dikit aja bikin hash beda).
-  app.use(express.json({ verify: (req, res, buf) => { req.rawBody = buf.toString('utf8'); } }));
+  app.use(express.json({ limit: "6mb", verify: (req, res, buf) => { req.rawBody = buf.toString('utf8'); } }));
 
   // Webhook GitHub - SEBELUM apiKeyAuth, karena GitHub gak bisa kirim Bearer
   // token kita. Autentikasinya sendiri (HMAC signature) dicek di dalam
@@ -100,10 +100,8 @@ function createServer() {
   });
 
   // Dashboard web + asset statis lain di public/ (dashboard.html, dst).
-  // Ditaruh SEBELUM apiKeyAuth karena HTML/CSS/JS-nya sendiri publik -
-  // otentikasi terjadi per-request lewat fetch() di sisi client (API key
-  // disimpan di localStorage browser, dikirim sebagai header Authorization),
-  // bukan lewat proteksi di level penyajian file statis.
+  // HTML/CSS/JS boleh diambil sebelum auth; data dan aksi dashboard tetap
+  // dilindungi session cookie HttpOnly + CSRF pada route API di bawah.
   app.use(express.static(path.join(__dirname, '..', '..', 'public')));
 
   // Setup/login/session adalah satu-satunya API publik selain health.
@@ -116,7 +114,7 @@ function createServer() {
     res.json({ success: true, message: 'ok', data: { time: new Date().toISOString() } });
   });
 
-  // Rate limit umum SEMUA route berbasis API key - bukan buat nyegah brute
+  // Rate limit umum semua route terlindungi - bukan buat nyegah brute
   // force (key-nya 256-bit, gak feasible ditebak), tapi buat batasin
   // dampaknya kalau key SUDAH bocor (mis. laptop kecolongan) - penyerang
   // gak bisa langsung banjirin ratusan `docker run`/`rm -rf`/dsb per detik.
@@ -130,7 +128,7 @@ function createServer() {
     message: { success: false, message: 'Terlalu banyak request, coba lagi sebentar lagi.', code: 'RATE_LIMITED' },
   }));
 
-  // Semua route di bawah ini WAJIB API key.
+  // Semua route di bawah wajib session dashboard atau Bearer API key.
   app.use(apiKeyAuth);
 
   app.use('/monitor', monitorRoutes);

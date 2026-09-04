@@ -1,12 +1,21 @@
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 const fm = require('../../filemanager/filemanager');
 const audit = require('../audit');
 const commandPolicy = require('../commandPolicy');
 
 const router = express.Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024 } });
+const uploadTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vps-manager-upload-'));
+const upload = multer({ dest: uploadTmpDir, limits: { fileSize: 200 * 1024 * 1024 } });
+
+function cleanupUpload(req) {
+  const tempPath = req.file?.path;
+  if (!tempPath) return;
+  try { fs.unlinkSync(tempPath); } catch (err) { if (err.code !== 'ENOENT') throw err; }
+}
 
 function guard(action, res) {
   if (!commandPolicy.isExposed(action)) {
@@ -163,17 +172,24 @@ router.delete('/', (req, res) => {
 
 router.post('/upload', upload.single('file'), (req, res) => {
   const ACTION = 'filemanager.upload';
-  if (!guard(ACTION, res)) return;
+  if (!guard(ACTION, res)) { cleanupUpload(req); return; }
   const destDir = req.body?.path;
   if (!destDir || !destDir.startsWith('/')) {
+    cleanupUpload(req);
     return res.status(400).json({ success: false, message: 'path (folder tujuan) wajib diisi.', code: 'INVALID_INPUT' });
   }
   if (!req.file) return res.status(400).json({ success: false, message: 'File wajib disertakan.', code: 'INVALID_INPUT' });
 
-  const destPath = path.posix.join(destDir, req.file.originalname);
+  const filename = path.basename(req.file.originalname || '');
+  if (!filename || filename === '.' || filename === '..') {
+    cleanupUpload(req);
+    return res.status(400).json({ success: false, message: 'Nama file tidak valid.', code: 'INVALID_INPUT' });
+  }
+  const destPath = path.posix.join(path.posix.normalize(destDir), filename);
   const startedAt = Date.now();
   const auditId = audit.recordStart({ action: ACTION, ip: req.ip, params: { destPath, size: req.file.size } });
-  const result = fm.uploadFile(destPath, req.file.buffer);
+  const result = fm.uploadFile(destPath, req.file.path);
+  cleanupUpload(req);
   audit.recordEnd(auditId, { success: result.ok, message: result.errorMessage || 'OK', durationMs: Date.now() - startedAt });
 
   if (!result.ok) return res.status(400).json({ success: false, message: result.errorMessage, code: 'FM_UPLOAD_FAILED' });
@@ -191,7 +207,13 @@ router.get('/download', (req, res) => {
 
   res.setHeader('Content-Disposition', `attachment; filename="${path.basename(p).replace(/"/g, '')}"`);
   res.setHeader('Content-Type', 'application/octet-stream');
-  res.send(result.buffer);
+  res.setHeader('Content-Length', String(result.size));
+  let stderr = '';
+  result.child.stderr.on('data', (chunk) => { if (stderr.length < 8192) stderr += chunk.toString().slice(0, 8192 - stderr.length); });
+  result.child.once('error', (err) => { if (!res.headersSent) res.status(500).json({ success: false, message: err.message, code: 'FM_DOWNLOAD_FAILED' }); else res.destroy(err); });
+  result.child.once('close', (code) => { if (code !== 0 && !res.destroyed) res.destroy(new Error(stderr.trim() || `sudo cat keluar dengan kode ${code}`)); });
+  res.once('close', () => { if (!res.writableEnded && result.child.exitCode === null) result.child.kill('SIGTERM'); });
+  result.stream.pipe(res);
 });
 
 module.exports = router;

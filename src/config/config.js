@@ -5,7 +5,8 @@ const { atomicWriteJSON, withFileLock } = require('../utils/safeFile');
 
 const CONFIG_PATH = process.env.VPS_MANAGER_CONFIG_PATH || path.join(__dirname, '..', '..', 'data', 'config.json');
 const API_KEY_MASTER_PATH = path.join(path.dirname(CONFIG_PATH), '.api-key-master');
-const API_KEY_LOCK_PATH = path.join(path.dirname(CONFIG_PATH), '.api-keys.lock');
+const CONFIG_LOCK_PATH = path.join(path.dirname(CONFIG_PATH), ".config.lock");
+const API_KEY_LOCK_PATH = CONFIG_LOCK_PATH;
 
 const DEFAULT_CONFIG = {
   deploy_user: 'ubuntu',
@@ -96,16 +97,26 @@ function loadConfig() {
   return JSON.parse(raw);
 }
 
-function saveConfig(config) {
+function writeConfig(config) {
   ensureConfigFile();
   atomicWriteJSON(CONFIG_PATH, config, 0o600);
 }
 
+function saveConfig(config) {
+  return withFileLock(CONFIG_LOCK_PATH, () => writeConfig(config), { timeoutMs: 15000, staleMs: 60000 });
+}
+
+function mutateConfig(mutator) {
+  return withFileLock(CONFIG_LOCK_PATH, () => {
+    const config = loadConfig();
+    const result = mutator(config);
+    writeConfig(config);
+    return result === undefined ? config : result;
+  }, { timeoutMs: 15000, staleMs: 60000 });
+}
+
 function updateConfig(key, value) {
-  const config = loadConfig();
-  config[key] = value;
-  saveConfig(config);
-  return config;
+  return mutateConfig((config) => { config[key] = value; return config; });
 }
 
 function listGithubAccounts() {
@@ -113,16 +124,16 @@ function listGithubAccounts() {
 }
 
 function addGithubAccount({ label, username, token }) {
-  const cfg = loadConfig();
-  const accounts = (cfg.github_accounts || []).filter((a) => a.label !== label);
-  accounts.push({ label, username, token });
-  saveConfig({ ...cfg, github_accounts: accounts });
+  return mutateConfig((config) => {
+    config.github_accounts = (config.github_accounts || []).filter((account) => account.label !== label);
+    config.github_accounts.push({ label, username, token });
+  });
 }
 
 function removeGithubAccount(label) {
-  const cfg = loadConfig();
-  const accounts = (cfg.github_accounts || []).filter((a) => a.label !== label);
-  saveConfig({ ...cfg, github_accounts: accounts });
+  return mutateConfig((config) => {
+    config.github_accounts = (config.github_accounts || []).filter((account) => account.label !== label);
+  });
 }
 
 /**
@@ -207,7 +218,7 @@ function createNamedApiKey(name) {
       createdAt: new Date().toISOString(),
     };
     cfg.api = { ...(cfg.api || DEFAULT_CONFIG.api), keys: [...keys, record] };
-    saveConfig(cfg);
+    writeConfig(cfg);
     return { ...apiKeyMetadata(record), apiKey };
   }, { timeoutMs: 15000, staleMs: 60000 });
 }
@@ -236,20 +247,18 @@ function revokeApiKey(id) {
       if (filtered.length === keys.length) return false;
       cfg.api.keys = filtered;
     }
-    saveConfig(cfg);
+    writeConfig(cfg);
     return true;
   }, { timeoutMs: 15000, staleMs: 60000 });
 }
 
 function generateApiKey() {
-  const plainKey = crypto.randomBytes(32).toString('hex');
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(plainKey, salt, 64).toString('hex');
-
-  const cfg = loadConfig();
-  cfg.api = { ...(cfg.api || DEFAULT_CONFIG.api), key_hash: hash, key_salt: salt };
-  saveConfig(cfg);
-
+  const plainKey = crypto.randomBytes(32).toString("hex");
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = crypto.scryptSync(plainKey, salt, 64).toString("hex");
+  mutateConfig((config) => {
+    config.api = { ...(config.api || DEFAULT_CONFIG.api), key_hash: hash, key_salt: salt };
+  });
   return plainKey;
 }
 
@@ -280,6 +289,7 @@ module.exports = {
   loadConfig,
   saveConfig,
   updateConfig,
+  mutateConfig,
   DEFAULT_CONFIG,
   listGithubAccounts,
   addGithubAccount,

@@ -527,11 +527,6 @@
       </div>
       <button class="btn-login" id="password-login-btn" type="submit">Masuk</button>
     </form>
-    <form id="legacy-login-form" hidden>
-      <div class="login-field"><label for="apikey-input">API key lama</label><input id="apikey-input" type="password" autocomplete="off" /></div>
-      <button class="btn-login" id="apikey-save" type="submit">Masuk sementara</button>
-      <div class="login-hint">Instalasi lama belum punya admin. Buat token setup lewat SSH:<br /><code>vps-manager setup-token regenerate</code></div>
-    </form>
   </div>
 </div>
 
@@ -1069,15 +1064,13 @@
 
 <script>
 const API_BASE = window.location.origin;
-let API_KEY = localStorage.getItem('vps_api_key') || '';
+localStorage.removeItem('vps_api_key');
 let AUTH_READY = false;
 let AUTH_MODE = null;
 let CSRF_TOKEN = '';
 
 const loginScreen = document.getElementById('login-screen');
-const loginInput = document.getElementById('apikey-input');
 const passwordForm = document.getElementById('password-login-form');
-const legacyForm = document.getElementById('legacy-login-form');
 const loginBtn = document.getElementById('password-login-btn');
 const loginError = document.getElementById('login-error');
 const loginErrorText = document.getElementById('login-error-text');
@@ -1088,21 +1081,18 @@ function cookieValue(name) {
   return part ? decodeURIComponent(part.slice(prefix.length)) : '';
 }
 
-function showLogin(errorMsg, legacy = false) {
+function showLogin(errorMsg) {
   loginScreen.style.display = 'flex';
-  passwordForm.hidden = legacy;
-  legacyForm.hidden = !legacy;
-  document.getElementById('login-title').textContent = legacy ? 'Akses instalasi lama' : 'Masuk ke VPS Manager';
-  document.getElementById('login-subtitle').textContent = legacy
-    ? 'API key tetap tersedia sementara sampai akun administrator selesai dibuat.'
-    : 'Gunakan akun administrator yang dibuat saat setup pertama.';
+  passwordForm.hidden = false;
+  document.getElementById('login-title').textContent = 'Masuk ke VPS Manager';
+  document.getElementById('login-subtitle').textContent = 'Gunakan akun administrator yang dibuat saat setup pertama.';
   if (errorMsg) {
     loginErrorText.textContent = errorMsg;
     loginError.classList.add('show');
     loginError.focus();
   }
   else { loginError.classList.remove('show'); }
-  setTimeout(() => (legacy ? loginInput : document.getElementById('login-username')).focus(), 50);
+  setTimeout(() => document.getElementById('login-username').focus(), 50);
 }
 function hideLogin() { loginScreen.style.display = 'none'; }
 
@@ -1132,7 +1122,6 @@ async function tryPasswordLogin(username, password) {
     });
     const body = await res.json();
     if (!res.ok || !body.success) throw new Error(body.message || 'Login gagal.');
-    localStorage.removeItem('vps_api_key'); API_KEY = '';
     finishLogin('session');
     toast('Berhasil masuk.', 'success');
   } catch (e) {
@@ -1140,19 +1129,6 @@ async function tryPasswordLogin(username, password) {
   } finally {
     loginBtn.disabled = false; loginBtn.textContent = 'Masuk';
   }
-}
-
-async function tryLegacyLogin(key) {
-  const button = document.getElementById('apikey-save');
-  button.disabled = true; button.textContent = 'Memeriksa...';
-  try {
-    const res = await fetch(API_BASE + '/monitor', { headers: { Authorization: 'Bearer ' + key } });
-    if (!res.ok) throw new Error(res.status === 401 ? 'API key salah atau tidak valid.' : `Server merespons HTTP ${res.status}.`);
-    API_KEY = key; localStorage.setItem('vps_api_key', key);
-    finishLogin('api-key');
-    toast('Masuk memakai API key lama.', 'success');
-  } catch (e) { showLogin(e.message, true); }
-  finally { button.disabled = false; button.textContent = 'Masuk sementara'; }
 }
 
 passwordForm.onsubmit = (event) => {
@@ -1163,19 +1139,11 @@ passwordForm.onsubmit = (event) => {
   tryPasswordLogin(username, password);
 };
 
-legacyForm.onsubmit = (event) => {
-  event.preventDefault();
-  const key = loginInput.value.trim();
-  if (!key) return showLogin('API key tidak boleh kosong.', true);
-  tryLegacyLogin(key);
-};
-
 document.getElementById('logout-btn').onclick = async () => {
   if (AUTH_MODE === 'session') {
     await fetch(API_BASE + '/auth/logout', { method: 'POST' }).catch(() => {});
   }
-  localStorage.removeItem('vps_api_key');
-  API_KEY = ''; CSRF_TOKEN = ''; AUTH_READY = false; AUTH_MODE = null;
+  CSRF_TOKEN = ''; AUTH_READY = false; AUTH_MODE = null;
   document.getElementById('login-password').value = '';
   await bootstrapAuth();
 };
@@ -1191,7 +1159,6 @@ function toast(msg, type = '') {
 async function api(path, opts = {}) {
   const method = (opts.method || 'GET').toUpperCase();
   const authHeaders = {};
-  if (AUTH_MODE === 'api-key' && API_KEY) authHeaders.Authorization = 'Bearer ' + API_KEY;
   if (AUTH_MODE === 'session' && !['GET', 'HEAD', 'OPTIONS'].includes(method)) authHeaders['X-CSRF-Token'] = CSRF_TOKEN;
   const res = await fetch(API_BASE + path, {
     ...opts,
@@ -2516,8 +2483,7 @@ async function backupDatabase() {
   catch (e) { toast('Gagal backup: ' + e.message, 'error'); }
 }
 function downloadBackup(filename) {
-  const suffix = AUTH_MODE === 'api-key' ? `?key=${encodeURIComponent(API_KEY)}` : '';
-  window.open(`${API_BASE}/backup/${encodeURIComponent(filename)}/download${suffix}`, '_blank');
+  window.open(`${API_BASE}/backup/${encodeURIComponent(filename)}/download`, '_blank');
 }
 function deleteBackup(filename) {
   showConfirmModal({
@@ -3505,8 +3471,7 @@ function fmDelete(fullPath) {
   });
 }
 function fmDownload(fullPath) {
-  const keyParam = AUTH_MODE === 'api-key' ? `&key=${encodeURIComponent(API_KEY)}` : '';
-  window.open(`${API_BASE}/filemanager/download?path=${encodeURIComponent(fullPath)}${keyParam}`, '_blank');
+  window.open(`${API_BASE}/filemanager/download?path=${encodeURIComponent(fullPath)}`, '_blank');
 }
 function fmUpload(input) {
   const file = input.files[0];
@@ -3514,9 +3479,7 @@ function fmUpload(input) {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('path', fmCurrentPath);
-  const headers = AUTH_MODE === 'api-key'
-    ? { Authorization: 'Bearer ' + API_KEY }
-    : { 'X-CSRF-Token': CSRF_TOKEN };
+  const headers = { 'X-CSRF-Token': CSRF_TOKEN };
   fetch(`${API_BASE}/filemanager/upload`, { method: 'POST', headers, body: formData })
     .then((r) => r.json())
     .then((json) => {
@@ -3696,6 +3659,7 @@ let termFitAddon = null;
 let termReconnectAttempt = 0;
 let termReconnectTimer = null;
 let termManualDisconnect = false;
+let termShellExited = false;
 const TERM_RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 15000]; // detik terakhir diulang terus kalau masih gagal
 
 function connectTerminal() {
@@ -3736,11 +3700,11 @@ function connectTerminal() {
 // koneksi putus TANPA bikin ulang instance xterm.js (biar scrollback gak
 // ilang tiap auto-reconnect, cuma bikin ulang socket-nya doang).
 function openTerminalSocket() {
+  termShellExited = false;
   const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const selectedUser = document.getElementById('terminal-user-select').value;
   document.getElementById('terminal-warning').style.display = selectedUser === 'ubuntu' ? 'block' : 'none';
   const params = new URLSearchParams();
-  if (AUTH_MODE === 'api-key') params.set('key', API_KEY);
   if (selectedUser) params.set('user', selectedUser);
   termSocket = new WebSocket(`${wsProtocol}//${location.host}/terminal?${params}`);
 
@@ -3751,10 +3715,10 @@ function openTerminalSocket() {
   termSocket.onmessage = (event) => {
     const msg = JSON.parse(event.data);
     if (msg.type === 'data') termInstance.write(msg.data);
-    else if (msg.type === 'exit') termInstance.writeln(`\r\n\x1b[31m[Shell keluar, kode: ${msg.exitCode}]\x1b[0m`);
+    else if (msg.type === 'exit') { termShellExited = true; termInstance.writeln(`\r\n\x1b[31m[Shell keluar, kode: ${msg.exitCode}]\x1b[0m`); }
   };
   termSocket.onclose = () => {
-    if (termManualDisconnect) return; // sengaja diputus (mis. ganti user/reconnect manual) - jangan auto-retry
+    if (termManualDisconnect || termShellExited) return; // sengaja putus atau shell sudah exit (mis. ganti user/reconnect manual) - jangan auto-retry
     const delay = TERM_RECONNECT_DELAYS[Math.min(termReconnectAttempt, TERM_RECONNECT_DELAYS.length - 1)];
     termInstance.writeln(`\r\n\x1b[33m[Koneksi terputus, nyambung ulang otomatis dalam ${delay / 1000}s...]\x1b[0m`);
     termReconnectAttempt++;
@@ -3770,6 +3734,7 @@ let dockerExecFitAddon = null;
 let dockerExecManualDisconnect = false;
 let dockerExecReconnectTimer = null;
 let dockerExecReconnectAttempt = 0;
+let dockerExecShellExited = false;
 
 async function refreshDockerExecContainers() {
   const select = document.getElementById('dockerexec-container-select');
@@ -3850,12 +3815,12 @@ async function refreshDockerExecInfo(container) {
 }
 
 function openDockerExecSocket() {
+  dockerExecShellExited = false;
   const container = document.getElementById('dockerexec-container-select').value;
   const shellChoice = document.getElementById('dockerexec-shell-select').value;
   if (!container) return;
   const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const params = new URLSearchParams({ container, shell: shellChoice });
-  if (AUTH_MODE === 'api-key') params.set('key', API_KEY);
   const socket = new WebSocket(`${wsProtocol}//${location.host}/docker-exec?${params}`);
   dockerExecSocket = socket;
 
@@ -3871,14 +3836,14 @@ function openDockerExecSocket() {
     if (dockerExecSocket !== socket) return;
     const msg = JSON.parse(event.data);
     if (msg.type === 'data') dockerExecInstance.write(msg.data);
-    else if (msg.type === 'exit') dockerExecInstance.writeln(`\r\n\x1b[31m[Shell keluar, kode: ${msg.exitCode}]\x1b[0m`);
+    else if (msg.type === 'exit') { dockerExecShellExited = true; dockerExecInstance.writeln(`\r\n\x1b[31m[Shell keluar, kode: ${msg.exitCode}]\x1b[0m`); }
   };
   socket.onclose = () => {
     if (dockerExecSocket !== socket) return;
     const status = document.getElementById('dockerexec-status');
     status.className = 'badge bad';
     status.textContent = 'Terputus';
-    if (dockerExecManualDisconnect) return;
+    if (dockerExecManualDisconnect || dockerExecShellExited) return;
     const delay = TERM_RECONNECT_DELAYS[Math.min(dockerExecReconnectAttempt, TERM_RECONNECT_DELAYS.length - 1)];
     dockerExecInstance.writeln(`\r\n\x1b[33m[Koneksi terputus, nyambung ulang otomatis dalam ${delay / 1000}s...]\x1b[0m`);
     dockerExecReconnectAttempt++;
@@ -4461,16 +4426,11 @@ async function bootstrapAuth() {
         location.replace('/setup.html');
         return;
       }
-      if (API_KEY) {
-        loginInput.value = API_KEY;
-        await tryLegacyLogin(API_KEY);
-      } else {
-        showLogin(state.setupExpired ? 'Setup token kedaluwarsa. Regenerasi token lewat SSH.' : null, true);
-      }
+      showLogin(state.setupExpired
+        ? 'Setup token kedaluwarsa. Jalankan "vps-manager setup-token regenerate" lewat SSH, lalu buka URL setup baru.'
+        : 'Panel belum memiliki akun administrator. Selesaikan setup memakai URL token dari installer.');
       return;
     }
-    localStorage.removeItem('vps_api_key');
-    API_KEY = '';
     const sessionResponse = await fetch(API_BASE + '/auth/session', { cache: 'no-store' });
     if (sessionResponse.ok) {
       finishLogin('session');

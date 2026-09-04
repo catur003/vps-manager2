@@ -23,7 +23,7 @@ try {
 
   if (result.ok) {
     const dbNote = result.dbCreds
-      ? `\nDB: ${result.dbCreds.database} / user: ${result.dbCreds.user} / password: ${result.dbCreds.password}`
+      ? `\nDB: ${result.dbCreds.database} / user: ${result.dbCreds.user}  (password hanya ditampilkan sekali saat provisioning)`
       : '';
     jobStore.updateJob(jobId, { status: 'success', message: `Stack "${job.params.stackName}" berhasil jalan (${result.framework}).${dbNote}` });
     notify.notify(`✅ Docker deploy berhasil: "${job.params.stackName}" (${result.framework})`).finally(() => process.exit(0));

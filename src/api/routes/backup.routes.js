@@ -1,6 +1,8 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
+const crypto = require('crypto');
 const multer = require('multer');
 const backup = require('../../backup/backup');
 const database = require('../../database/database');
@@ -9,6 +11,7 @@ const config = require('../../config/config');
 const audit = require('../audit');
 const commandPolicy = require('../commandPolicy');
 const { validateName } = require('../../menu/helpers');
+const shell = require('../../utils/shell');
 
 const router = express.Router();
 
@@ -47,13 +50,17 @@ function resolveBackupFile(filename, res) {
   return filename;
 }
 
-// Upload SQL dari HP - disimpan di memory dulu (bukan langsung ke disk lewat
-// multer diskStorage) karena nama file final WAJIB disanitasi ketat sebelum
-// nyentuh filesystem (lihat safeUploadFilename), sama prinsip kayak validasi
-// filename lain di file ini. Limit 300MB cukup buat dump SQL mentah (belum
-// di-gzip) untuk kebanyakan database - samain kelasnya sama DB_MAX_BUFFER
-// di backup.js.
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 300 * 1024 * 1024 } });
+// Upload SQL ditampung sementara di disk oleh multer, bukan di RAM Node.
+// Nama final tetap disanitasi sebelum file dipindah ke backup_dir. Limit
+// 300MB membatasi ukuran file di disk, bukan pemakaian buffer RAM proses.
+const uploadTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vps-manager-sql-upload-'));
+const upload = multer({ dest: uploadTmpDir, limits: { fileSize: 300 * 1024 * 1024 } });
+
+function cleanupUpload(req) {
+  const tempPath = req.file?.path;
+  if (!tempPath) return;
+  try { fs.unlinkSync(tempPath); } catch (err) { if (err.code !== 'ENOENT') throw err; }
+}
 
 /**
  * Nama file upload dari HP TIDAK PERNAH dipercaya mentah-mentah (bisa berisi
@@ -71,7 +78,8 @@ function safeUploadFilename(originalName) {
   const baseRaw = path.basename(raw, ext);
   const base = baseRaw.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 60) || 'upload';
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
-  return `upload-${base}-${ts}${ext}`;
+  const nonce = crypto.randomBytes(4).toString('hex');
+  return `upload-${base}-${ts}-${nonce}${ext}`;
 }
 
 function guard(action, res) {
@@ -394,7 +402,7 @@ router.get('/:filename/download', (req, res) => {
  */
 router.post('/upload-sql', upload.single('file'), (req, res) => {
   const ACTION = 'backup.uploadSql';
-  if (!guard(ACTION, res)) return;
+  if (!guard(ACTION, res)) { cleanupUpload(req); return; }
 
   if (!req.file) {
     return res.status(400).json({ success: false, message: 'File wajib diupload (field "file").', code: 'INVALID_INPUT' });
@@ -402,6 +410,7 @@ router.post('/upload-sql', upload.single('file'), (req, res) => {
 
   const safeName = safeUploadFilename(req.file.originalname);
   if (!safeName) {
+    cleanupUpload(req);
     return res.status(400).json({
       success: false,
       message: 'File harus berekstensi .sql atau .sql.gz.',
@@ -411,6 +420,7 @@ router.post('/upload-sql', upload.single('file'), (req, res) => {
 
   const ensureResult = backup.ensureBackupDir();
   if (!ensureResult.ok) {
+    cleanupUpload(req);
     return res.status(500).json({ success: false, message: ensureResult.errorMessage, code: 'BACKUP_DIR_FAILED' });
   }
 
@@ -418,11 +428,16 @@ router.post('/upload-sql', upload.single('file'), (req, res) => {
   const auditId = audit.recordStart({ action: ACTION, ip: req.ip, params: { filename: safeName, sizeBytes: req.file.size } });
   const target = path.join(backup.backupDir(), safeName);
 
-  try {
-    fs.writeFileSync(target, req.file.buffer);
-  } catch (err) {
-    audit.recordEnd(auditId, { success: false, message: err.message, durationMs: Date.now() - startedAt });
-    return res.status(500).json({ success: false, message: `Gagal simpan file upload: ${err.message}`, code: 'UPLOAD_WRITE_FAILED' });
+  const moveResult = shell.runArgs('sudo', ['mv', '--', req.file.path, target], { silent: true });
+  if (!moveResult.ok) {
+    cleanupUpload(req);
+    audit.recordEnd(auditId, { success: false, message: moveResult.errorMessage, durationMs: Date.now() - startedAt });
+    return res.status(500).json({ success: false, message: `Gagal simpan file upload: ${moveResult.errorMessage}`, code: 'UPLOAD_WRITE_FAILED' });
+  }
+  const modeResult = shell.runArgs('sudo', ['chmod', '600', '--', target], { silent: true });
+  if (!modeResult.ok) {
+    audit.recordEnd(auditId, { success: false, message: modeResult.errorMessage, durationMs: Date.now() - startedAt });
+    return res.status(500).json({ success: false, message: `File tersimpan tetapi gagal mengamankan permission: ${modeResult.errorMessage}`, code: 'UPLOAD_CHMOD_FAILED' });
   }
 
   audit.recordEnd(auditId, { success: true, message: 'OK', durationMs: Date.now() - startedAt });

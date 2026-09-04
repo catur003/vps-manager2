@@ -1,4 +1,8 @@
 const shell = require('../utils/shell');
+const postgres = require('../database/postgres');
+const { withFileLock } = require('../utils/safeFile');
+
+const TOOLS_LOCK_PATH = '/tmp/vps-manager-tools.lock';
 
 /**
  * Daftar tool yang BIASANYA dibutuhkan di VPS produksi. `pkg` dipakai
@@ -88,9 +92,14 @@ function findTool(key) {
  * sudah tidak ada. installTool() menolak kombinasi ini lebih awal dengan
  * pesan jelas, alih-alih membiarkan apt merusak instalasi yang sedang dipakai.
  */
-const DB_ENGINE_CONFLICTS = {
+const INSTALL_CONFLICTS = {
   mysql: { name: 'MariaDB Server', checkPkgs: ['mariadb-server'] },
   mariadb: { name: 'MySQL Server', checkPkgs: ['mysql-server-8.0', 'mysql-server'] },
+  // Docker daemon dari Ubuntu dan Docker CE resmi tidak boleh dicampur.
+  // docker-ce-cli ikut dicek karena apt dapat melepasnya saat memasang
+  // docker.io, meskipun package daemon docker-ce tidak tercatat utuh.
+  docker: { name: 'Docker CE', checkPkgs: ['docker-ce', 'docker-ce-cli'] },
+  'docker-ce': { name: 'Docker Engine (docker.io)', checkPkgs: ['docker.io'] },
 };
 
 /**
@@ -101,6 +110,51 @@ const DB_ENGINE_CONFLICTS = {
 function isPkgInstalled(pkg) {
   const r = shell.runArgs('dpkg-query', ['-W', '-f=${db:Status-Status}', pkg], { silent: true });
   return r.ok && r.output.trim() === 'installed';
+}
+
+const SERVICE_PORTS = {
+  nginx: [80, 443],
+  mysql: [3306],
+  mariadb: [3306],
+  postgresql: [5432],
+  redis: [6379],
+  memcached: [11211],
+};
+
+function findOccupiedPorts(key) {
+  const ports = SERVICE_PORTS[key] || [];
+  if (ports.length === 0) return [];
+  const result = shell.runArgs('sudo', ['ss', '-tlnp'], { silent: true });
+  if (!result.ok) return [];
+  return result.output.split('\n').filter((line) => {
+    const columns = line.trim().split(/\s+/);
+    const localAddress = columns[3] || '';
+    return ports.some((port) => localAddress.endsWith(':' + port));
+  }).map((line) => line.trim()).slice(0, 4);
+}
+
+function isAaPanelNginxActive() {
+  const result = shell.runArgs('ps', ['-eo', 'args'], { silent: true });
+  return result.ok && result.output.split('\n').some((line) => line.includes('/www/server/nginx/sbin/nginx'));
+}
+
+/**
+ * Simulasi resolver apt adalah sumber kebenaran terakhir: paket bisa punya
+ * konflik transitif yang tidak tercantum di daftar manual. Jangan jalankan
+ * install nyata kalau resolver berencana melepas package apa pun.
+ */
+function findPlannedRemovals(pkg) {
+  const result = shell.runArgs('apt-get', ['-s', 'install', '-y', pkg], {
+    silent: true,
+    timeoutMs: 60 * 1000,
+  });
+  if (!result.ok) return { ok: false, errorMessage: result.errorMessage };
+
+  const packages = result.output.split('\n')
+    .map((line) => line.trim().match(/^Remv\s+([^\s]+)/))
+    .filter(Boolean)
+    .map((match) => match[1]);
+  return { ok: true, packages: [...new Set(packages)] };
 }
 
 /**
@@ -117,7 +171,7 @@ function detectTools() {
   return TOOLS.map((t) => {
     const installed = t.checkBin
       ? (() => { const result = shell.runArgs('which', [t.checkBin], { silent: true }); return result.ok && !!result.output; })()
-      : shell.runArgs('dpkg', ['-s', t.pkg], { silent: true }).ok;
+      : isPkgInstalled(t.pkg);
     return {
       key: t.key,
       name: t.name,
@@ -135,12 +189,26 @@ function detectTools() {
  * sudoers bisa di-scope exact per paket (lihat setup-sudoers.sh) tanpa buka
  * celah "apt-get install -y <apa aja>".
  */
-function installTool(key) {
+function installToolUnlocked(key) {
   const tool = findTool(key);
   if (!tool) return { ok: false, errorMessage: `Tool "${key}" tidak dikenal.` };
 
-  // Guard konflik engine database (lihat DB_ENGINE_CONFLICTS di atas).
-  const conflict = DB_ENGINE_CONFLICTS[key];
+  // Jangan pasang daemon baru ke port yang sudah dipakai service/container
+  // lain. Kalau package target sendiri sudah terpasang, apt install ulang
+  // tetap boleh karena itu operasi idempotent.
+  if (!isPkgInstalled(tool.pkg)) {
+    const occupied = findOccupiedPorts(key);
+    if (occupied.length > 0) {
+      return {
+        ok: false,
+        errorMessage: `${tool.name} tidak jadi diinstall: port servicenya sudah dipakai. ` +
+          `Stop/migrasikan service atau container yang bentrok dulu. Listener: ${occupied.join(' | ')}`,
+      };
+    }
+  }
+
+  // Guard konflik engine yang diketahui (database dan Docker).
+  const conflict = INSTALL_CONFLICTS[key];
   if (conflict && conflict.checkPkgs.some(isPkgInstalled)) {
     return {
       ok: false,
@@ -157,8 +225,43 @@ function installTool(key) {
     return { ok: false, errorMessage: `apt-get update gagal: ${updateResult.errorMessage}` };
   }
 
+  // aaPanel menjalankan binary Nginx sendiri. Paket nginx Ubuntu tidak
+  // otomatis menggantikannya, tapi keduanya akan berebut port 80/443 dan
+  // operator bisa salah mengedit konfigurasi. Deteksi dari proses aktif,
+  // bukan cuma folder aaPanel yang mungkin tinggal sisa.
+  if (key === 'nginx' && !isPkgInstalled('nginx') && isAaPanelNginxActive()) {
+    return {
+      ok: false,
+      errorMessage:
+        'Nginx aaPanel sedang aktif. Install nginx Ubuntu dibatalkan agar tidak berebut port 80/443 atau membuat konfigurasi salah sasaran. ' +
+        'Gunakan Nginx aaPanel yang ada, atau migrasikan dan matikan aaPanel Nginx secara manual terlebih dahulu.',
+    };
+  }
+
+  const simulation = findPlannedRemovals(tool.pkg);
+  if (!simulation.ok) {
+    return { ok: false, errorMessage: 'Simulasi apt gagal, install dibatalkan demi keamanan: ' + simulation.errorMessage };
+  }
+  if (simulation.packages.length > 0) {
+    return {
+      ok: false,
+      errorMessage:
+        tool.name + ' tidak jadi diinstall karena apt berencana menghapus: ' + simulation.packages.join(', ') + '. ' +
+        'Tidak ada perubahan dilakukan. Backup dan migrasikan manual bila memang ingin mengganti package tersebut.',
+    };
+  }
+
   const result = shell.runArgs('sudo', ['apt-get', 'install', '-y', tool.pkg], { timeoutMs: 5 * 60 * 1000 });
   if (!result.ok) return { ok: false, errorMessage: result.errorMessage };
+
+  // PostgreSQL bawaan Ubuntu hanya mengizinkan role postgres lewat peer
+  // socket. Panel memakai TCP, jadi password harus diinisialisasi sekarang.
+  if (key === 'postgresql') {
+    const setup = postgres.setupRootPostgres();
+    if (!setup.ok) return { ok: false, errorMessage: setup.errorMessage };
+    return { ok: true, output: (result.output + '\n' + setup.message).trim() };
+  }
+
   return { ok: true, output: result.output };
 }
 
@@ -169,7 +272,7 @@ function installTool(key) {
  * daripada purge). Sama pola kayak installTool(): `pkg` SELALU dari TOOLS
  * (lookup by key), gak pernah dari body request langsung.
  */
-function uninstallTool(key) {
+function uninstallToolUnlocked(key) {
   const tool = findTool(key);
   if (!tool) return { ok: false, errorMessage: `Tool "${key}" tidak dikenal.` };
 
@@ -178,4 +281,30 @@ function uninstallTool(key) {
   return { ok: true, output: result.output };
 }
 
-module.exports = { TOOLS, detectTools, installTool, uninstallTool, findTool };
+function runWithToolsLock(fn) {
+  try {
+    return withFileLock(TOOLS_LOCK_PATH, fn, { timeoutMs: 1500, staleMs: 10 * 60 * 1000 });
+  } catch (err) {
+    return { ok: false, errorMessage: 'Operasi install/uninstall lain masih berjalan. Tunggu sampai selesai lalu coba lagi. (' + err.message + ')' };
+  }
+}
+
+function installTool(key) {
+  return runWithToolsLock(() => installToolUnlocked(key));
+}
+
+function uninstallTool(key) {
+  return runWithToolsLock(() => uninstallToolUnlocked(key));
+}
+
+module.exports = {
+  TOOLS,
+  detectTools,
+  installTool,
+  uninstallTool,
+  findTool,
+  isPkgInstalled,
+  isAaPanelNginxActive,
+  findPlannedRemovals,
+  findOccupiedPorts,
+};

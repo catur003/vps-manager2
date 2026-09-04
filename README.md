@@ -40,7 +40,7 @@ Installer menyiapkan dependency, folder kerja, sudoers, MariaDB, setup token adm
 
 ## Keamanan
 
-- **`data/config.json` di-`chmod 600` otomatis** tiap kali dibaca/ditulis (isinya kredensial: `db_root_password`, dll), jadi cuma owner (`ubuntu`) yang bisa baca file itu.
+- **`data/config.json` di-`chmod 600` otomatis** tiap kali dibaca/ditulis (isinya kredensial: `db_root_password`, dll), jadi cuma owner proses panel yang bisa baca file itu.
 - **Command yang mengandung password (mysqldump/mysql restore) selalu jalan dengan `silent: true`**, jadi password nggak pernah muncul di log/scrollback terminal.
 - **Input nama project & domain divalidasi** (cuma huruf/angka/titik/dash/underscore) sebelum dipakai di command shell, buat cegah command injection dari input yang aneh-aneh.
 - Semua input tetap diasumsikan datang dari operator yang trusted (kamu sendiri lewat prompt interaktif) — bukan dari sumber luar/API publik. Kalau nanti tool ini dikembangin buat nerima input dari luar (misal webhook), validasi ini perlu diperkuat lagi.

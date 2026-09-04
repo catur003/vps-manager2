@@ -9,7 +9,8 @@ const { execSync } = require('child_process');
  * db-registry, jobs) yang ditulis berkali-kali selama proses jalan.
  */
 function atomicWriteJSON(filePath, data, mode = null) {
-  const tmpPath = `${filePath}.tmp`;
+  // Nama temp unik mencegah proses lain menimpa `.tmp` sebelum rename.
+  const tmpPath = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
   fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2));
   // chmod file .tmp SEBELUM rename, bukan sesudah - kalau `mode` diisi (mis.
   // 0o600 untuk file berisi kredensial kayak config.json/db-registry.json).

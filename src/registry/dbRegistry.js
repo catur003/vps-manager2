@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { atomicWriteJSON } = require('../utils/safeFile');
+const { atomicWriteJSON, withFileLock } = require('../utils/safeFile');
 const secretCrypto = require('../utils/secretCrypto');
 
 // Field yang mengandung kredensial mentah - dienkripsi saat storage, didekripsi
@@ -11,6 +11,7 @@ const secretCrypto = require('../utils/secretCrypto');
 const SENSITIVE_FIELDS = ['password', 'connectionUrl'];
 
 const DB_REGISTRY_PATH = path.join(__dirname, '..', '..', 'data', 'db-registry.json');
+const LOCK_PATH = `${DB_REGISTRY_PATH}.lock`;
 
 /**
  * Registry lokal buat "mengingat" kredensial database yang tool ini tahu
@@ -93,9 +94,11 @@ function saveAll(entries) {
  */
 function upsertEntry(entry) {
   if (!entry || !entry.dbName) throw new Error('upsertEntry butuh field dbName.');
-  const entries = loadAll().filter((e) => e.dbName !== entry.dbName);
-  entries.push({ ...entry, savedAt: new Date().toISOString() });
-  saveAll(entries);
+  return withFileLock(LOCK_PATH, () => {
+    const entries = loadAll().filter((e) => e.dbName !== entry.dbName);
+    entries.push({ ...entry, savedAt: new Date().toISOString() });
+    saveAll(entries);
+  }, { timeoutMs: 15000, staleMs: 60000 });
 }
 
 function listEntries() {
@@ -107,8 +110,10 @@ function findByName(dbName) {
 }
 
 function removeEntry(dbName) {
-  const entries = loadAll().filter((e) => e.dbName !== dbName);
-  saveAll(entries);
+  return withFileLock(LOCK_PATH, () => {
+    const entries = loadAll().filter((e) => e.dbName !== dbName);
+    saveAll(entries);
+  }, { timeoutMs: 15000, staleMs: 60000 });
 }
 
 module.exports = { upsertEntry, listEntries, findByName, removeEntry };

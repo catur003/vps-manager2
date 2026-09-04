@@ -7,6 +7,7 @@ const redeploy = require('../../deploy/redeploy');
 const jobStore = require('../jobs/jobStore');
 
 const router = express.Router();
+const activeWebhookProjects = new Set();
 
 /**
  * Verifikasi signature GitHub (`X-Hub-Signature-256: sha256=<hmac>`) pakai
@@ -60,13 +61,15 @@ router.post('/github/:projectName', async (req, res) => {
     return res.status(403).json({ success: false, message: `Webhook belum diaktifkan untuk project "${project.name}" - aktifkan dulu dari halaman Deployments.`, code: 'WEBHOOK_NOT_ENABLED' });
   }
 
-  // Balas GitHub SEGERA (GitHub kasih timeout ~10 detik ke webhook, sedangkan
-  // pull+install+build bisa jauh lebih lama) - proses lanjut di background,
-  // progress dipantau lewat jobStore/dashboard, bukan lewat response ini.
-  const jobId = jobStore.createJob('webhook_redeploy', { name: project.name });
-  res.status(202).json({ success: true, message: 'Redeploy diterima, jalan di background.', data: { jobId } });
-
-  await redeploy.runRedeploy(project, jobId, { triggeredBy: 'webhook GitHub' });
+  if (activeWebhookProjects.has(project.name)) {
+    return res.status(409).json({ success: false, message: `Redeploy ${project.name} masih berjalan.`, code: "REDEPLOY_IN_PROGRESS" });
+  }
+  activeWebhookProjects.add(project.name);
+  const jobId = jobStore.createJob("webhook_redeploy", { name: project.name });
+  res.status(202).json({ success: true, message: "Redeploy diterima, jalan di background.", data: { jobId } });
+  setImmediate(() => redeploy.runRedeploy(project, jobId, { triggeredBy: "webhook GitHub" })
+    .catch(() => {})
+    .finally(() => activeWebhookProjects.delete(project.name)));
 });
 
 module.exports = router;

@@ -21,6 +21,72 @@ function generatePassword() {
   return crypto.randomBytes(18).toString('base64').replace(/[+/=]/g, '').slice(0, 20);
 }
 
+function testCredentials(user, password) {
+  const env = { ...process.env, PGPASSWORD: password };
+  return shell.runArgs('psql', [
+    '-h', '127.0.0.1', '-U', user, '-d', 'postgres',
+    '-t', '-A', '-v', 'ON_ERROR_STOP=1', '-c', 'SELECT 1;',
+  ], { silent: true, env, timeoutMs: 30 * 1000 });
+}
+
+function setupRootPostgres() {
+  if (!shell.commandExists('psql')) {
+    return { ok: false, notInstalled: true, errorMessage: 'PostgreSQL belum terinstall.' };
+  }
+
+  const cfg = config.loadConfig();
+  const user = cfg.pg_root_user || 'postgres';
+  if (!isValidName(user)) return { ok: false, errorMessage: 'pg_root_user di Configuration tidak valid.' };
+
+  // Jangan timpa password lama. Jika gagal, operator harus memperbaikinya
+  // secara sadar agar aplikasi PostgreSQL lain tidak putus.
+  if (cfg.pg_root_password) {
+    const existing = testCredentials(user, cfg.pg_root_password);
+    if (existing.ok) return { ok: true, message: 'PostgreSQL sudah terkonfigurasi untuk user "' + user + '" - dilewati.' };
+    return {
+      ok: false,
+      errorMessage:
+        'PostgreSQL terpasang, tapi kredensial ' + user + ' yang tersimpan tidak bisa dipakai. ' +
+        'Password tidak diubah otomatis untuk menghindari putusnya aplikasi yang sudah memakai database. ' +
+        'Perbaiki pg_root_password di Configuration atau reset role "' + user + '" secara manual. (' +
+        interpretPgError(existing.errorMessage) + ')',
+    };
+  }
+
+  const start = shell.runArgs('sudo', ['-n', '/bin/systemctl', 'enable', '--now', 'postgresql'], {
+    silent: true,
+    timeoutMs: 60 * 1000,
+  });
+  if (!start.ok) return { ok: false, errorMessage: 'Gagal mengaktifkan service PostgreSQL: ' + start.errorMessage };
+
+  const password = generatePassword();
+  const sql = 'ALTER ROLE "' + user + '" WITH LOGIN PASSWORD \''
+    + escapeSqlString(password) + '\';';
+  const setPassword = shell.runArgs('sudo', [
+    '-n', '-u', 'postgres', '/usr/bin/psql',
+    '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-c', sql,
+  ], { silent: true, timeoutMs: 30 * 1000 });
+  if (!setPassword.ok) {
+    return {
+      ok: false,
+      errorMessage: 'PostgreSQL terpasang tapi gagal mengatur password role "' + user +
+        '". Pastikan sudoers PostgreSQL sudah terpasang lalu coba lagi. (' + setPassword.errorMessage + ')',
+    };
+  }
+
+  const verified = testCredentials(user, password);
+  if (!verified.ok) {
+    return {
+      ok: false,
+      errorMessage: 'Password PostgreSQL sudah diatur tapi koneksi TCP belum berhasil; config tidak disimpan agar tidak desync. (' +
+        interpretPgError(verified.errorMessage) + ')',
+    };
+  }
+
+  config.mutateConfig((current) => Object.assign(current, { pg_root_user: user, pg_root_password: password }));
+  return { ok: true, message: 'PostgreSQL siap dipakai melalui TCP untuk user "' + user + '".' };
+}
+
 function interpretPgError(rawMessage) {
   const msg = (rawMessage || '').trim();
   if (!msg) return 'Terjadi error saat menjalankan query PostgreSQL (tidak ada detail error).';
@@ -29,6 +95,9 @@ function interpretPgError(rawMessage) {
   }
   if (/password authentication failed/i.test(msg)) {
     return `Login PostgreSQL ditolak (user/password salah). Cek pg_root_user/pg_root_password di Configuration. (${msg})`;
+  }
+  if (/no password supplied/i.test(msg)) {
+    return `PostgreSQL belum diinisialisasi untuk koneksi panel. Jalankan Install PostgreSQL lagi dari Tools / Installer agar password role postgres dibuat otomatis. (${msg})`;
   }
   if (/permission denied/i.test(msg)) {
     return `User PostgreSQL ini nggak punya izin buat aksi ini. (${msg})`;
@@ -165,4 +234,6 @@ module.exports = {
   testConnection,
   getServerVersion,
   formatBytes,
+  setupRootPostgres,
+  testCredentials,
 };

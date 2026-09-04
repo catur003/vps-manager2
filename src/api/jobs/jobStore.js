@@ -1,9 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { atomicWriteJSON } = require('../../utils/safeFile');
+const { atomicWriteJSON, withFileLock } = require('../../utils/safeFile');
 
 const JOBS_PATH = path.join(__dirname, '..', '..', '..', 'data', 'jobs.json');
+const JOBS_LOCK_PATH = `${JOBS_PATH}.lock`;
 // "cloneurl" ditambahin di sini karena deploy.routes.js sekarang bisa
 // nyisipin username:token GitHub ke params.cloneUrl (lihat buildAuthenticatedUrl
 // di git.js) - tanpa "cloneurl" match regex ini, token itu bakal ke-expose
@@ -90,6 +91,15 @@ function save(data) {
   atomicWriteJSON(JOBS_PATH, data, 0o600);
 }
 
+function mutate(mutator) {
+  return withFileLock(JOBS_LOCK_PATH, () => {
+    const data = load();
+    const result = mutator(data);
+    save(data);
+    return result;
+  }, { timeoutMs: 15000, staleMs: 5 * 60 * 1000 });
+}
+
 /**
  * Dipanggil sekali pas API baru start. Job yang statusnya masih
  * "pending"/"running" dari sebelum restart itu SUDAH PASTI gak lagi
@@ -97,18 +107,19 @@ function save(data) {
  * "interrupted" biar gak nge-hang selamanya keliatan kayak masih jalan.
  */
 function reconcileInterruptedJobs() {
-  const data = load();
-  let changed = false;
-  for (const job of Object.values(data.jobs)) {
-    if (job.status === 'pending' || job.status === 'running') {
-      job.status = 'interrupted';
-      job.message = 'API restart di tengah proses - status akhir job ini gak diketahui, cek manual.';
-      job.updatedAt = new Date().toISOString();
-      changed = true;
+  return mutate((data) => {
+    let changed = false;
+    for (const job of Object.values(data.jobs)) {
+      if (job.status === "pending" || job.status === "running") {
+        job.status = "interrupted";
+        job.message = "API restart di tengah proses - status akhir job ini gak diketahui, cek manual.";
+        job.updatedAt = new Date().toISOString();
+        changed = true;
+      }
     }
-  }
-  if (autoClean(data)) changed = true;
-  if (changed) save(data);
+    if (autoClean(data)) changed = true;
+    return changed;
+  });
 }
 
 /**
@@ -142,30 +153,21 @@ function autoClean(data) {
 }
 
 function createJob(type, params) {
-  const data = load();
-  autoClean(data); // self-maintain retensi tiap ada job baru, lihat catatan di atas
-  const id = crypto.randomUUID();
-  const now = new Date().toISOString();
-  data.jobs[id] = {
-    id,
-    type,
-    params: params || {}, // ASLI, tidak diredact - lihat catatan di atas file
-    status: 'pending',
-    message: '',
-    steps: [],
-    createdAt: now,
-    updatedAt: now,
-  };
-  save(data);
-  return id;
+  return mutate((data) => {
+    autoClean(data);
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    data.jobs[id] = { id, type, params: params || {}, status: "pending", message: "", steps: [], createdAt: now, updatedAt: now };
+    return id;
+  });
 }
 
 function updateJob(id, patch) {
-  const data = load();
-  if (!data.jobs[id]) return null;
-  data.jobs[id] = { ...data.jobs[id], ...patch, updatedAt: new Date().toISOString() };
-  save(data);
-  return data.jobs[id];
+  return mutate((data) => {
+    if (!data.jobs[id]) return null;
+    data.jobs[id] = { ...data.jobs[id], ...patch, updatedAt: new Date().toISOString() };
+    return data.jobs[id];
+  });
 }
 
 /**
@@ -176,16 +178,16 @@ function updateJob(id, patch) {
  * npm/prisma/build biasanya ada di akhir, bukan di awal.
  */
 function appendJobStep(id, step) {
-  const data = load();
-  if (!data.jobs[id]) return null;
-  let message = step.message;
-  if (typeof message === 'string' && message.length > MAX_STEP_MESSAGE_LENGTH) {
-    message = `...(dipotong, ${message.length - MAX_STEP_MESSAGE_LENGTH} karakter awal dibuang)...\n${message.slice(-MAX_STEP_MESSAGE_LENGTH)}`;
-  }
-  data.jobs[id].steps.push({ ...step, message, at: new Date().toISOString() });
-  data.jobs[id].updatedAt = new Date().toISOString();
-  save(data);
-  return data.jobs[id];
+  return mutate((data) => {
+    if (!data.jobs[id]) return null;
+    let message = step.message;
+    if (typeof message === "string" && message.length > MAX_STEP_MESSAGE_LENGTH) {
+      message = message.slice(-MAX_STEP_MESSAGE_LENGTH);
+    }
+    data.jobs[id].steps.push({ ...step, message, at: new Date().toISOString() });
+    data.jobs[id].updatedAt = new Date().toISOString();
+    return data.jobs[id];
+  });
 }
 
 function getJob(id) {
@@ -203,15 +205,13 @@ function listJobs() {
  * "jangan hapus yang masih jalan" berulang di tiap caller.
  */
 function deleteJob(id) {
-  const data = load();
-  const job = data.jobs[id];
-  if (!job) return { ok: false, reason: 'NOT_FOUND' };
-  if (job.status === 'pending' || job.status === 'running') {
-    return { ok: false, reason: 'STILL_RUNNING' };
-  }
-  delete data.jobs[id];
-  save(data);
-  return { ok: true };
+  return mutate((data) => {
+    const job = data.jobs[id];
+    if (!job) return { ok: false, reason: "NOT_FOUND" };
+    if (job.status === "pending" || job.status === "running") return { ok: false, reason: "STILL_RUNNING" };
+    delete data.jobs[id];
+    return { ok: true };
+  });
 }
 
 /**
@@ -221,15 +221,13 @@ function deleteJob(id) {
  * Return jumlah job yang kebuang.
  */
 function clearFinishedJobs() {
-  const data = load();
-  const before = Object.keys(data.jobs).length;
-  const kept = {};
-  Object.values(data.jobs).forEach((job) => {
-    if (!FINAL_STATUSES.has(job.status)) kept[job.id] = job;
+  return mutate((data) => {
+    const before = Object.keys(data.jobs).length;
+    const kept = {};
+    Object.values(data.jobs).forEach((job) => { if (!FINAL_STATUSES.has(job.status)) kept[job.id] = job; });
+    data.jobs = kept;
+    return before - Object.keys(kept).length;
   });
-  data.jobs = kept;
-  save(data);
-  return before - Object.keys(kept).length;
 }
 
 module.exports = {
