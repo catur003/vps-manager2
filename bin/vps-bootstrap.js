@@ -58,6 +58,8 @@ async function main() {
   const deployUser = process.env.BOOTSTRAP_DEPLOY_USER || process.env.USER;
   const port = parseInt(process.env.BOOTSTRAP_PORT || (directHttps ? '4002' : '4001'), 10);
   const repoPath = process.env.BOOTSTRAP_REPO_PATH || process.cwd();
+  const deferPm2Startup = process.env.BOOTSTRAP_DEFER_PM2_STARTUP === '1';
+  const preservePlatformConfig = process.env.BOOTSTRAP_PRESERVE_PLATFORM_CONFIG === '1';
 
   if (!domain && !directHttps) {
     logger.error('Isi BOOTSTRAP_DOMAIN atau aktifkan BOOTSTRAP_DIRECT_HTTPS=1.');
@@ -74,6 +76,21 @@ async function main() {
 
   logger.title('vps-manager Bootstrap');
   logger.info(`Akses: ${domain || ('https://' + publicHost + ':' + publicPort)} | Deploy user: ${deployUser} | Port internal: ${port}`);
+
+  // Installer mengirim hasil deteksi platform secara eksplisit. Ini membuat
+  // fresh Ubuntu memakai nginx paket distro, tetapi instalasi aaPanel lama
+  // tetap bisa memakai path aaPanel tanpa hardcode salah satu lingkungan.
+  if (!preservePlatformConfig) {
+    const platformCfg = config.loadConfig();
+    platformCfg.deploy_user = deployUser;
+    platformCfg.default_folder = process.env.BOOTSTRAP_APPS_DIR || platformCfg.default_folder;
+    platformCfg.docker_projects_dir = process.env.BOOTSTRAP_DOCKER_DIR || platformCfg.docker_projects_dir || '/opt/docker';
+    platformCfg.certbot_webroot = process.env.BOOTSTRAP_CERTBOT_DIR || platformCfg.certbot_webroot;
+    platformCfg.nginx_conf_dir = process.env.BOOTSTRAP_NGINX_CONF_DIR || platformCfg.nginx_conf_dir;
+    platformCfg.nginx_binary = process.env.BOOTSTRAP_NGINX_BINARY || platformCfg.nginx_binary;
+    platformCfg.nginx_log_dir = process.env.BOOTSTRAP_NGINX_LOG_DIR || platformCfg.nginx_log_dir;
+    config.saveConfig(platformCfg);
+  }
 
   // 0/6 - Self-heal ownership SEBELUM apa-apa lagi (FIXED, laporan Zen
   // berulang: config.json/data/ kena EACCES pas dibaca proses PM2 yang
@@ -126,7 +143,7 @@ async function main() {
       '',
       `Buka: ${cfg.api.public_url}/setup.html`,
       `Berlaku sampai: ${setupToken.expiresAt}`,
-      'Kalau hilang/kedaluwarsa: vps-manager setup-token regenerate',
+      `Kalau hilang/kedaluwarsa: cd ${repoPath} && node bin/vps-manager.js setup-token regenerate`,
     ], { color: 'red' });
   }
 
@@ -160,7 +177,9 @@ async function main() {
   // sendiri jalan sebagai deploy_user (bukan root), jadi command yang
   // di-generate perlu di-extract dulu baru dieksekusi lewat sudo terpisah.
   const startupCheck = shell.run(`systemctl is-enabled pm2-${deployUser} 2>/dev/null`, { silent: true });
-  if (startupCheck.ok && startupCheck.output.trim() === 'enabled') {
+  if (deferPm2Startup) {
+    logger.info('Registrasi service boot PM2 akan diselesaikan installer sebagai root.');
+  } else if (startupCheck.ok && startupCheck.output.trim() === 'enabled') {
     logger.info('PM2 boot persistence udah aktif sebelumnya - dilewatin.');
   } else {
     const startupGen = shell.run(`pm2 startup systemd -u ${deployUser} --hp /home/${deployUser}`, { silent: true });
@@ -226,8 +245,17 @@ async function main() {
 
   // 6/6 - SSL
   logger.section('6/6 - Terbitkan SSL');
+  let httpsReady = false;
   if (ssl.checkCertExists(domain)) {
-    logger.info(`Sertifikat SSL untuk "${domain}" udah ada - dilewatin.`);
+    const existingCert = {
+      fullchain: `/etc/letsencrypt/live/${domain}/fullchain.pem`,
+      privkey: `/etc/letsencrypt/live/${domain}/privkey.pem`,
+    };
+    const upgradeResult = nginx.upgradeToSSL({ domain, port, ...existingCert });
+    httpsReady = upgradeResult.ok;
+    upgradeResult.ok
+      ? logger.success(`Sertifikat lama ditemukan dan HTTPS aktif untuk "${domain}".`)
+      : logger.warn(`Sertifikat ditemukan tapi gagal upgrade Nginx ke HTTPS: ${upgradeResult.errorMessage}`);
   } else {
     const sslResult = ssl.issueCertificate(domain, []);
     if (!sslResult.ok) {
@@ -237,6 +265,7 @@ async function main() {
       );
     } else {
       const upgradeResult = nginx.upgradeToSSL({ domain, port, fullchain: sslResult.fullchain, privkey: sslResult.privkey });
+      httpsReady = upgradeResult.ok;
       upgradeResult.ok
         ? logger.success(`HTTPS aktif untuk "${domain}".`)
         : logger.warn(`SSL terbit tapi gagal upgrade Nginx ke HTTPS: ${upgradeResult.errorMessage}`);
@@ -244,12 +273,15 @@ async function main() {
   }
 
   logger.title('Bootstrap Selesai');
+  const finalCfg = config.loadConfig();
+  finalCfg.api = { ...(finalCfg.api || {}), public_url: `${httpsReady ? 'https' : 'http'}://${domain}` };
+  config.saveConfig(finalCfg);
   logger.card('Ringkasan', [
-    `API URL   : https://${domain}`,
+    `API URL   : ${httpsReady ? 'https' : 'http'}://${domain}`,
     `Deploy user: ${deployUser}`,
     `Repo path : ${repoPath}`,
     '',
-    `Setup admin: https://${domain}/setup.html`,
+    `Setup admin: ${httpsReady ? 'https' : 'http'}://${domain}/setup.html`,
     'API token untuk mobile/bot dapat dibuat terpisah setelah login.',
   ]);
 }

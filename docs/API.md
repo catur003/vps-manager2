@@ -81,7 +81,7 @@ Request mutasi dari session web wajib membawa `X-CSRF-Token`; dashboard mengurus
 Authorization: Bearer <API_KEY>
 ```
 
-`API_KEY` dibuat dengan `node bin/vps-api-keygen.js`. Generate ulang membatalkan key lama tanpa memengaruhi session web.
+`API_KEY` bernama dibuat dari menu **API Keys** setelah login. Setiap key dapat di-reveal atau dicabut sendiri tanpa memengaruhi key lain maupun session web. `node bin/vps-api-keygen.js` hanya untuk format legacy.
 
 Endpoint publik yang tidak membutuhkan session/Bearer:
 
@@ -100,7 +100,7 @@ Endpoint publik yang tidak membutuhkan session/Bearer:
 { "token": "...", "username": "admin", "password": "...", "passwordConfirm": "..." }
 ```
 
-Setup token berlaku 24 jam, sekali pakai, dan diregenerasi lewat `vps-manager setup-token regenerate`. Setelah admin terbentuk, endpoint setup tidak dapat membuat admin kedua.
+Setup token berlaku 24 jam, sekali pakai, dan diregenerasi dari folder repository lewat `node bin/vps-manager.js setup-token regenerate`. Membuat token baru membatalkan token lama. Setelah admin terbentuk, endpoint setup tidak dapat membuat admin kedua.
 
 Kalau autentikasi hilang/salah:
 
@@ -611,19 +611,20 @@ Baca & ubah konfigurasi **tool ini sendiri** (bukan config per-project) — depl
 ### `GET /config` — `data`
 ```json
 {
-  "deploy_user": "www",
+  "deploy_user": "ubuntu",
   "nginx_user": "www-data",
-  "default_folder": "/www/wwwroot",
+  "default_folder": "/opt/apps",
+  "docker_projects_dir": "/opt/docker",
   "git_branch": "main",
   "starting_port": 3000,
-  "nginx_conf_dir": "/www/server/panel/vhost/nginx",
-  "nginx_binary": "/www/server/nginx/sbin/nginx",
-  "certbot_webroot": "/var/www/certbot",
+  "nginx_conf_dir": "/etc/nginx/sites-available",
+  "nginx_binary": "/usr/sbin/nginx",
+  "certbot_webroot": "/opt/certbot",
   "certbot_email": "",
   "db_root_user": "root",
   "backup_dir": "/www/backup_manager",
   "backup_retention_days": 7,
-  "nginx_log_dir": "/www/wwwlogs",
+  "nginx_log_dir": "/var/log/nginx",
   "runtime_default": { "node": "20.9.0", "php": "8.2" },
   "hasDbPassword": true,
   "api": { "port": 4001 },

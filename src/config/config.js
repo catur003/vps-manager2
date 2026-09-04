@@ -8,14 +8,15 @@ const API_KEY_MASTER_PATH = path.join(path.dirname(CONFIG_PATH), '.api-key-maste
 const API_KEY_LOCK_PATH = path.join(path.dirname(CONFIG_PATH), '.api-keys.lock');
 
 const DEFAULT_CONFIG = {
-  deploy_user: 'www',
+  deploy_user: 'ubuntu',
   nginx_user: 'www-data',
-  default_folder: '/www/wwwroot',
+  default_folder: '/opt/apps',
+  docker_projects_dir: '/opt/docker',
   git_branch: 'main',
   starting_port: 3000,
-  nginx_conf_dir: '/www/server/panel/vhost/nginx',
-  nginx_binary: '/www/server/nginx/sbin/nginx',
-  certbot_webroot: '/var/www/certbot',
+  nginx_conf_dir: '/etc/nginx/sites-available',
+  nginx_binary: '/usr/sbin/nginx',
+  certbot_webroot: '/opt/certbot',
   certbot_email: '',
   db_root_user: 'root',
   db_root_password: '',
@@ -23,7 +24,7 @@ const DEFAULT_CONFIG = {
   pg_root_password: '',
   backup_dir: '/www/backup_manager',
   backup_retention_days: 7,
-  nginx_log_dir: '/www/wwwlogs',
+  nginx_log_dir: '/var/log/nginx',
   // Path file credentials Cloudflare (format INI, `dns_cloudflare_api_token
   // = <token>`) buat certbot plugin `dns-cloudflare` - dipakai buat wildcard
   // SSL (DNS-01 challenge, satu-satunya cara certbot bisa nerbitin cert
@@ -42,9 +43,10 @@ const DEFAULT_CONFIG = {
     node: '20.9.0',
     php: '8.2',
   },
-  // Config buat REST API (bot Telegram/mobile/web GUI). `key_hash`+`key_salt`
-  // itu hasil scrypt dari API key asli - key PLAINTEXT-nya CUMA ditampilin
-  // sekali pas di-generate (lihat generateApiKey()), gak pernah disimpen.
+  // Config buat REST API (bot/mobile/web GUI). `key_hash`+`key_salt` adalah
+  // key legacy. Key bernama di `keys` menyimpan hash untuk autentikasi dan
+  // ciphertext AES-GCM agar operator bisa melakukan reveal setelah verifikasi
+  // password; master enkripsinya disimpan terpisah dengan permission 600.
   api: {
     port: 4001,
     // Direct HTTPS dipakai fresh install yang belum punya domain.

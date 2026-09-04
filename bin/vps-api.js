@@ -14,7 +14,7 @@ const port = (cfg.api && cfg.api.port) || 4001;
 
 const authStatus = authStore.status();
 if ((!cfg.api || !cfg.api.key_hash) && !authStatus.initialized && !authStatus.setupEnabled) {
-  logger.error('Autentikasi belum disiapkan. Jalankan: vps-manager setup-token regenerate');
+  logger.error('Autentikasi belum disiapkan. Dari folder repo jalankan: node bin/vps-manager.js setup-token regenerate');
   process.exit(1);
 }
 

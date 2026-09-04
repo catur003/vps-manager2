@@ -27,16 +27,16 @@ Mini DevOps CLI pribadi buat gantiin aaPanel — kelola banyak project (Next.js,
 
 Hampir semua menu di atas sudah punya endpoint REST yang setara — Deploy (async/job), Git, PM2, Nginx (termasuk error log per domain), SSL (issue), Database, Backup, Security, Scanner, Cleanup, Configuration (+ akun GitHub, cocok buat halaman Settings di mobile app), Doctor/Permission, dan `.env`/delete project.
 
-- **Setup lengkap** (akun admin, session web, direct IP:4001 atau domain, API key untuk automation): lihat **[setup.md](setup.md#6-setup-rest-api)**.
+- **Setup lengkap** (akun admin, session web, direct IP:4001 atau domain, API key untuk automation): lihat **[setup.md](setup.md)**.
 - **Referensi tiap endpoint** (request/response, kode error, mana yang butuh `confirm`): lihat **[docs/API.md](docs/API.md)**.
 
 Ringkas:
 ```bash
-vps-manager setup-token regenerate  # token setup admin 24 jam, sekali pakai
-node bin/vps-api.js                  # start API
-node bin/vps-api-keygen.js           # opsional: API key mobile/bot/script
+git clone https://github.com/catur003/vps-manager2.git
+cd vps-manager2
+sudo bash setup-otomatis.sh
 ```
-Web memakai username/password + session cookie; mobile/bot/script tetap memakai `Authorization: Bearer <api key>`. Aksi yang mengubah data lama secara permanen (drop database, hapus project, dll) wajib `{ "confirm": true }`. Semua request tercatat di `data/audit.log` dengan field sensitif di-redact.
+Installer menyiapkan dependency, folder kerja, sudoers, MariaDB, setup token admin, PM2, firewall, dan Nginx/SSL secara otomatis. Web memakai username/password + session cookie; API key bernama untuk mobile/bot/script dibuat dari menu **API Keys** setelah login. Aksi yang mengubah data lama secara permanen (drop database, hapus project, dll) wajib `{ "confirm": true }`. Semua request tercatat di `data/audit.log` dengan field sensitif di-redact.
 
 ## Keamanan
 
@@ -52,16 +52,16 @@ Panduan lengkap instalasi CLI, setup sudo (wajib), penjelasan tiap field `data/c
 
 Ringkas banget buat yang sudah familiar:
 ```bash
-git clone https://github.com/catur003/vps-manager.git
-cd vps-manager
-npm install
-sudo bash scripts/setup-sudoers.sh   # WAJIB, sebelum pakai fitur selain Configuration/Project List
-npm start                            # atau: vps-manager (kalau sudah di-link, lihat setup.md)
+git clone https://github.com/catur003/vps-manager2.git
+cd vps-manager2
+sudo bash setup-otomatis.sh
 ```
+
+Tidak perlu menjalankan `npm install`, setup sudoers, setup database, atau PM2 satu per satu. Lihat [setup.md](setup.md) untuk pilihan domain/direct IP dan perubahan sistem yang dilakukan installer.
 
 ## Struktur Data
 
-- `data/config.json` — konfigurasi global (penjelasan tiap field ada di [setup.md](setup.md#4-konfigurasi-dataconfigjson))
+- `data/config.json` — konfigurasi global (penjelasan default ada di [setup.md](setup.md#6-default-konfigurasi))
 - `data/registry.json` — daftar project terdaftar (nama, path, domain, port, deploy_user, dll)
 
 Kedua file **jangan di-commit ke git** (sudah ada di `.gitignore`), karena isinya spesifik ke VPS ini.
@@ -74,11 +74,4 @@ Tool ini didesain untuk **berdampingan dulu** dengan aaPanel, bukan langsung men
 3. Backup penuh VPS udah dilakukan (termasuk `/etc/letsencrypt`, database, dan folder project)
 4. Cek semua file `.conf` di `nginx_conf_dir` nggak ada yang `include` ke file/snippet punya aaPanel yang bakal ikut kehapus
 
-## Dependency Tambahan yang Mungkin Dibutuhkan
-
-```bash
-which certbot || sudo apt install certbot -y
-which fail2ban-client || sudo apt install fail2ban -y   # opsional, buat Security Manager
-```
-
-Detail lengkap ada di [setup.md](setup.md#9-dependency-tambahan-opsional).
+Dependency sistem utama dipasang oleh `setup-otomatis.sh`; tidak perlu dipasang satu per satu.

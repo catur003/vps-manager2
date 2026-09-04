@@ -91,7 +91,7 @@ router.get('/', (req, res) => {
     return res.status(403).json({ success: false, message: 'Action belum diizinkan.', code: 'ACTION_NOT_ALLOWED' });
   }
   const cfg = config.loadConfig();
-  const result = dockerCompose.listStacks(cfg.default_folder, cfg.deploy_user);
+  const result = dockerCompose.listStacks(cfg.docker_projects_dir || cfg.default_folder, cfg.deploy_user);
   if (!result.ok) return res.status(500).json({ success: false, message: result.errorMessage, code: 'LIST_STACKS_FAILED' });
   res.json({ success: true, message: 'OK', data: { stacks: result.stacks } });
 });

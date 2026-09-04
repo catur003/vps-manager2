@@ -45,7 +45,7 @@ async function main() {
     return;
   }
   if (command === 'setup-token') {
-    if (subcommand && subcommand !== 'regenerate') throw new Error('Gunakan: vps-manager setup-token regenerate');
+    if (subcommand && subcommand !== 'regenerate') throw new Error('Gunakan: node bin/vps-manager.js setup-token regenerate');
     const result = authStore.generateSetupToken();
     console.log('');
     console.log('Setup token baru (hanya ditampilkan sekarang):');
@@ -61,7 +61,7 @@ async function main() {
     return;
   }
   if (command) {
-    throw new Error('Command tidak dikenal. Gunakan setup-status, setup-token regenerate, atau admin reset-password.');
+    throw new Error('Command tidak dikenal. Gunakan setup-status, setup-token regenerate, atau admin reset-password dari bin/vps-manager.js.');
   }
   await showMainMenu();
 }

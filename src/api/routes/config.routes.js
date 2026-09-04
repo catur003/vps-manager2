@@ -14,6 +14,7 @@ const EDITABLE_FIELDS = [
   'deploy_user',
   'nginx_user',
   'default_folder',
+  'docker_projects_dir',
   'git_branch',
   'starting_port',
   'nginx_conf_dir',

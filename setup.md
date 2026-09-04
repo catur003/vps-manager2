@@ -1,250 +1,235 @@
-# Setup Guide — VPS Manager
+# Setup VPS Manager
 
-Panduan lengkap dari nol: instalasi CLI, setup sudo, konfigurasi, sampai menyalakan REST API supaya bisa diakses dari bot Telegram / mobile app / web GUI.
+Panduan ini untuk fresh install di Ubuntu 22.04/24.04. Setelah repository
+di-clone, seluruh provisioning dijalankan oleh satu script.
 
-> Untuk referensi lengkap tiap endpoint API (request/response, error code), lihat **[docs/API.md](docs/API.md)**.
+Referensi endpoint REST tersedia di [docs/API.md](docs/API.md).
 
----
+## 1. Sebelum mulai
 
-## Daftar Isi
+Yang dibutuhkan:
 
-1. [Prasyarat](#1-prasyarat)
-2. [Instalasi CLI](#2-instalasi-cli)
-3. [Setup Sudo (wajib)](#3-setup-sudo-wajib)
-4. [Konfigurasi (`data/config.json`)](#4-konfigurasi-dataconfigjson)
-5. [Pakai CLI](#5-pakai-cli)
-6. [Setup REST API](#6-setup-rest-api)
-7. [Jalankan API sebagai Service (PM2/systemd)](#7-jalankan-api-sebagai-service-pm2systemd)
-8. [Expose API ke Internet (buat Mobile App/Bot)](#8-expose-api-ke-internet-buat-mobile-appbot)
-9. [Dependency Tambahan (opsional)](#9-dependency-tambahan-opsional)
-10. [Troubleshooting Cepat](#10-troubleshooting-cepat)
+- VPS Ubuntu dengan akses SSH dan `sudo`.
+- `git` untuk clone repository.
+- Jika memakai domain, DNS A record sebaiknya sudah mengarah ke IP VPS.
+- Clone dari home user SSH biasa, jangan dari `/root`.
 
----
+Perlu diketahui bahwa installer akan memasang paket sistem, mengaktifkan UFW,
+memasang dan mengamankan MariaDB, menulis rule sudoers scoped, serta membuat
+service PM2. Semua itu dilakukan setelah perintah installer dijalankan dengan
+`sudo`.
 
-## 1. Prasyarat
+## 2. Instalasi otomatis
 
-- VPS Linux (Ubuntu, dites di lingkungan aaPanel) dengan akses SSH & `sudo`.
-- Node.js **>= 16** (cek: `node -v`).
-- Akses `sudo` ke user SSH kamu (dipakai buat setup sudoers di langkah 3).
-- Kalau mau pakai fitur Database Manager/Backup: MySQL/MariaDB sudah terinstall & kredensial root diketahui.
-- Kalau mau pakai fitur Nginx/SSL: Nginx sudah terinstall & jalan (path binary/config bisa beda-beda tergantung aaPanel vs paket Ubuntu biasa — lihat langkah 4).
-
-## 2. Instalasi CLI
+Jalankan:
 
 ```bash
-git clone https://github.com/catur003/vps-manager.git
-cd vps-manager
-npm install
+sudo apt-get update
+sudo apt-get install -y git
+git clone https://github.com/catur003/vps-manager2.git
+cd vps-manager2
+sudo bash setup-otomatis.sh
 ```
 
-**(Opsional) Link jadi command global** — biar `vps-manager` bisa dipanggil dari folder manapun:
+Setelah clone, cukup jalankan `setup-otomatis.sh`. Tidak perlu menjalankan
+`npm install`, setup sudoers, setup database, atau PM2 satu per satu.
 
-- Kalau Node diinstall via **nvm**: `npm link` langsung, tanpa sudo.
-- Kalau Node diinstall via **apt/system** (`which node` → `/usr/bin/node`): pakai prefix folder sendiri biar tidak bentrok dengan Node punya root/aaPanel:
-  ```bash
-  mkdir -p ~/.npm-global
-  npm config set prefix ~/.npm-global
-  echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.bashrc
-  source ~/.bashrc
-  npm link
-  ```
+Installer menanyakan:
 
-Setelah itu, dari terminal mana saja: `vps-manager`
+1. Deploy user. Default-nya user SSH yang menjalankan `sudo`.
+2. Domain panel. Kosongkan untuk akses langsung melalui
+   `https://IP_VPS:4001`.
 
-**(Opsional) Set editor jadi nano** — biar gampang pas isi `.env`/config lewat prompt `editor`:
+Script idempotent: kalau koneksi terminal terputus atau suatu langkah gagal,
+masuk lagi ke folder repository lalu jalankan perintah yang sama.
+
+### Mode non-interaktif
+
+Direct IP:
+
 ```bash
-echo 'export EDITOR=nano' >> ~/.bashrc
-source ~/.bashrc
+sudo INSTALL_DEPLOY_USER=ubuntu \
+  INSTALL_PUBLIC_HOST=203.0.113.10 \
+  bash setup-otomatis.sh
 ```
 
-## 3. Setup Sudo (wajib)
+Domain:
 
-Banyak fitur butuh akses ke user lain (deploy user, mis. `www`) atau ke root (nginx reload, certbot, dump database, dll) **tanpa** prompt password, karena tool ini jalan non-interaktif saat eksekusi command.
-
-**Cara termudah (direkomendasikan)** — pakai script yang sudah disediakan, idempoten (aman dijalankan berkali-kali):
 ```bash
-sudo bash scripts/setup-sudoers.sh
-```
-Script ini akan menanyakan user yang menjalankan proses `vps-manager`/`vps-api` dan deploy user-nya, lalu menulis rule sudoers **scoped** ke command yang benar-benar dibutuhkan (bukan blanket akses penuh).
-
-**Cara manual (kalau lebih suka kontrol penuh)** — `sudo visudo`, tambahkan di baris paling bawah:
-
-Opsi A — spesifik per command (lebih aman, tapi perlu ditambah manual tiap ada fitur baru butuh command baru):
-```
-ubuntu ALL=(www) NOPASSWD: ALL
-ubuntu ALL=(root) NOPASSWD: /bin/mkdir, /bin/chown, /bin/cat, /bin/ls, /bin/cp, /bin/rm, /bin/tar, /usr/bin/find, /bin/grep, /www/server/nginx/sbin/nginx, /usr/bin/certbot, /usr/bin/test, /usr/bin/openssl, /usr/bin/ss, /usr/sbin/ufw, /usr/bin/firewall-cmd, /usr/bin/fail2ban-client
+sudo INSTALL_DEPLOY_USER=ubuntu \
+  INSTALL_DOMAIN=panel.example.com \
+  bash setup-otomatis.sh
 ```
 
-Opsi B — full akses (simpel, tapi kalau akun `ubuntu` ke-compromise langsung dapat root):
+## 3. Yang dikerjakan installer
+
+Installer otomatis:
+
+1. Memasang Node.js LTS, PM2, Nginx, Certbot, MariaDB, UFW, Fail2ban, dan
+   build tools.
+2. Membuat deploy user bila belum ada. User baru dibuat tanpa password login.
+3. Membuat folder:
+   - `/opt/apps` untuk project biasa.
+   - `/opt/docker` untuk stack Compose dan persistent data aplikasi.
+   - `/opt/certbot` untuk ACME webroot.
+4. Mendeteksi Nginx Ubuntu standar atau instalasi aaPanel yang sudah ada.
+5. Memasang dependency Node dan mencoba memasang command global
+   `vps-manager`.
+6. Menulis rule sudoers scoped yang dibutuhkan panel.
+7. Mengaktifkan serta mengamankan MariaDB. Password root acak disimpan dalam
+   `data/config.json` dengan permission `600`.
+8. Membuat setup token administrator yang berlaku 24 jam dan sekali pakai.
+9. Menjalankan API dengan PM2 dan mendaftarkannya agar aktif lagi setelah
+   reboot.
+10. Membuka UFW:
+    - SSH: TCP 22.
+    - Direct IP: TCP 4001.
+    - Domain: TCP 80 dan 443.
+11. Membuat sertifikat self-signed untuk direct IP, atau mencoba menerbitkan
+    Let's Encrypt untuk domain.
+
+UFW hanya firewall di dalam VPS. Firewall milik provider tetap harus dibuka
+manual melalui panel provider:
+
+- Oracle Cloud: Security List atau NSG.
+- AWS: Security Group.
+- GCP: VPC Firewall.
+- Provider lain: Cloud Firewall atau Network Firewall.
+
+Untuk direct IP, buka inbound TCP 4001. Sebaiknya batasi source ke IP perangkat
+operator (`IP/32`). Jangan membuka port internal 4002.
+
+## 4. Login pertama
+
+Di akhir instalasi, terminal menampilkan setup token dan URL seperti:
+
+```text
+Setup URL : https://IP_VPS:4001/setup.html
+Setup token: ...
 ```
-ubuntu ALL=(ALL) NOPASSWD: ALL
+
+Untuk mode direct IP, browser akan memperingatkan bahwa sertifikat self-signed.
+Cocokkan fingerprint SHA-256 di browser dengan fingerprint yang ditampilkan
+installer sebelum melanjutkan.
+
+Setup token:
+
+- Berlaku 24 jam.
+- Hanya dapat digunakan sekali.
+- Hanya ada satu token aktif.
+- Membuat token baru langsung membatalkan token sebelumnya.
+- Setelah administrator berhasil dibuat, endpoint setup tidak dapat digunakan
+  untuk membuat admin kedua.
+
+Jika token hilang, kedaluwarsa, atau terminal tertutup:
+
+```bash
+cd /path/ke/vps-manager2
+node bin/vps-manager.js setup-token regenerate
 ```
 
-Ganti `ubuntu` sesuai user SSH kamu kalau beda.
+Perintah ini tidak bergantung pada keberhasilan `npm link`. Cek status dengan:
 
-## 4. Konfigurasi (`data/config.json`)
+```bash
+node bin/vps-manager.js setup-status
+```
 
-File ini dibuat otomatis (default values) saat pertama kali CLI/API dijalankan, permission otomatis `chmod 600` (cuma owner file yang bisa baca — isinya termasuk password MySQL root). Edit lewat menu CLI **13. Configuration**, atau `PUT /config` di API, atau langsung `nano data/config.json`.
+## 5. API key
 
-> File ini **tidak otomatis update** kalau ada field baru dari `git pull` (sudah ada duluan di VPS dan masuk `.gitignore`). Field baru harus ditambah manual.
+Dashboard memakai username/password dan session cookie. API key hanya untuk
+mobile app, bot, atau script otomatis.
+
+Setelah login:
+
+1. Buka menu **API Keys**.
+2. Pilih **Create API Key**.
+3. Isi nama yang menjelaskan pemakaiannya.
+4. Salin atau reveal key dari menu tersebut.
+5. Cabut key tertentu jika perangkat/integrasi tidak lagi digunakan.
+
+Format CLI `vps-api-keygen.js` adalah legacy dan tidak digunakan untuk
+instalasi baru. API key lama yang pernah terekspos harus di-rotate.
+
+Contoh request:
+
+```bash
+curl https://panel.example.com/monitor \
+  -H "Authorization: Bearer <API_KEY>"
+```
+
+## 6. Default konfigurasi
+
+Konfigurasi tersimpan di `data/config.json`:
 
 ```json
 {
-  "deploy_user": "www",
+  "deploy_user": "ubuntu",
   "nginx_user": "www-data",
-  "default_folder": "/www/wwwroot",
+  "default_folder": "/opt/apps",
+  "docker_projects_dir": "/opt/docker",
   "git_branch": "main",
   "starting_port": 3000,
-  "nginx_conf_dir": "/www/server/panel/vhost/nginx",
-  "nginx_binary": "/www/server/nginx/sbin/nginx",
-  "certbot_webroot": "/var/www/certbot",
-  "certbot_email": "email_kamu@example.com",
+  "nginx_conf_dir": "/etc/nginx/sites-available",
+  "nginx_binary": "/usr/sbin/nginx",
+  "nginx_log_dir": "/var/log/nginx",
+  "certbot_webroot": "/opt/certbot",
+  "certbot_email": "",
   "db_root_user": "root",
-  "db_root_password": "isi_password_mysql_root",
+  "db_root_password": "(dibuat otomatis)",
   "backup_dir": "/www/backup_manager",
-  "nginx_log_dir": "/www/wwwlogs",
-  "backup_retention_days": 7,
-  "runtime_default": { "node": "20.9.0", "php": "8.2" }
+  "backup_retention_days": 7
 }
 ```
 
-| Field | Fungsi | Dipakai di |
-|---|---|---|
-| `deploy_user` | User pemilik file project (bukan user SSH-mu) | Semua Deploy/Git/PM2 |
-| `nginx_user` | User yang menjalankan worker nginx | Referensi permission |
-| `default_folder` | Folder induk default buat project baru | Deploy Project Baru |
-| `git_branch` | Branch default kalau tidak diisi manual | Deploy Project Baru |
-| `starting_port` | Port awal buat auto-suggest port kosong | Deploy Project Baru |
-| `nginx_conf_dir` | Lokasi file `.conf` per-site nginx (aaPanel) | Nginx Manager |
-| `nginx_binary` | Binary nginx yang **beneran aktif** (cek `ps aux \| grep nginx`, aaPanel biasanya bukan `/usr/sbin/nginx`) | Nginx Manager, SSL Manager |
-| `certbot_webroot` | Folder validasi ACME challenge Let's Encrypt | SSL Manager |
-| `certbot_email` | Email pendaftaran Let's Encrypt (boleh kosong) | SSL Manager |
-| `db_root_user` / `db_root_password` | Kredensial MySQL/MariaDB | Database Manager, Backup Manager |
-| `backup_dir` | Lokasi simpan file hasil backup | Backup Manager |
-| `nginx_log_dir` | Folder log nginx (dipakai buat baca error log per-domain) | Log Viewer, `GET /nginx/sites/:file/error-log` |
-| `backup_retention_days` | Backup lebih tua dari ini otomatis kehapus | Backup Manager |
+`deploy_user` akan mengikuti pilihan saat instalasi. Jika aaPanel terdeteksi,
+installer mengganti konfigurasi Nginx ke path aaPanel yang benar secara
+otomatis.
 
-**Kalau nginx/mysql yang aktif ternyata punya aaPanel** (bukan paket Ubuntu biasa): cek dulu binary yang beneran jalan pakai `ps aux | grep nginx` / `ps aux | grep mysql`, samakan path-nya di `nginx_binary`/kredensial MySQL di sini. Ini juga penting buat nanti migrasi lepas dari aaPanel — tinggal ganti path di satu tempat ini, tidak perlu edit kode.
+Folder `/opt/docker` hanya menyimpan file project seperti
+`docker-compose.yml`, `.env`, dan persistent application data. Storage
+internal Docker tetap di `/var/lib/docker`, sedangkan containerd tetap di
+`/var/lib/containerd`.
 
-## 5. Pakai CLI
+## 7. Pemeriksaan setelah instalasi
 
 ```bash
-npm start
-# atau, kalau sudah di-link:
-vps-manager
-```
-Menu interaktif akan muncul — lihat daftar lengkap menu di [README.md](README.md).
-
-## 6. Setup REST API
-
-REST API dipakai kalau kamu mau kontrol VPS ini dari luar terminal — bot Telegram, mobile app, atau web GUI.
-
-**Login web pertama:** buat setup token yang berlaku 24 jam dan sekali pakai:
-```bash
-vps-manager setup-token regenerate
-```
-Kalau token hilang, kedaluwarsa, atau terminal tertutup, jalankan command yang sama. Token lama langsung dibatalkan. Cek status dengan `vps-manager setup-status`.
-
-**Jalankan API:**
-```bash
-node bin/vps-api.js
-# atau: npm run api
-```
-
-Mode domain memakai HTTP internal `127.0.0.1:4001`. Fresh install tanpa domain memakai internal `127.0.0.1:4002` dan direct HTTPS self-signed `0.0.0.0:4001`.
-
-**Tes internal:**
-```bash
+pm2 status
+pm2 logs vps-manager-api
 curl http://127.0.0.1:4001/health
-# -> {"success":true,"message":"ok","data":{"time":"..."}}
 ```
 
-Web dashboard memakai username/password dan session cookie. API key tetap khusus mobile, bot, atau script:
+Pada mode direct IP, API internal memakai port 4002:
 
 ```bash
-node bin/vps-api-keygen.js
-curl https://panel.example.com/monitor -H "Authorization: Bearer <API_KEY>"
+curl http://127.0.0.1:4002/health
 ```
 
-Generate ulang API key membatalkan key lama, tetapi tidak mengeluarkan session web.
-
-## 7. Jalankan API sebagai Service (PM2/systemd)
-
-Supaya API tetap jalan setelah kamu logout SSH / server reboot, jangan jalankan `node bin/vps-api.js` langsung di terminal. Dua pilihan umum:
-
-**Opsi A — PM2** (tool ini sendiri sudah pakai PM2 buat project lain, jadi kemungkinan besar sudah terinstall di VPS-mu):
-```bash
-pm2 start bin/vps-api.js --name vps-manager-api
-pm2 save
-pm2 startup   # ikuti instruksi yang ditampilkan, sekali saja per VPS
-```
-Cek status: `pm2 logs vps-manager-api` / `pm2 restart vps-manager-api`.
-
-**Opsi B — systemd** — buat file `/etc/systemd/system/vps-manager-api.service`:
-```ini
-[Unit]
-Description=VPS Manager REST API
-After=network.target
-
-[Service]
-Type=simple
-User=ubuntu
-WorkingDirectory=/home/ubuntu/vps-manager
-ExecStart=/usr/bin/node bin/vps-api.js
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-Sesuaikan `User`/`WorkingDirectory`/path Node (`which node`) dengan setup-mu, lalu:
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now vps-manager-api
-sudo systemctl status vps-manager-api
-```
-
-## 8. Expose API ke Internet (buat Mobile App/Bot)
-
-Ada dua mode akses:
-
-**A. Domain + Nginx (disarankan permanen)**
-
-1. Arahkan sebuah domain/subdomain (mis. `api.domainkamu.com`) ke IP VPS ini (A record di DNS).
-2. Buat reverse proxy ke port internal API.
-3. Aktifkan HTTPS: **SSL Manager (menu 7)** untuk domain itu, atau `POST /ssl/issue` dengan `{ "domain": "api.domainkamu.com" }`.
-4. Browser memakai session; mobile/bot memakai Bearer API key.
-
-**B. Direct IP:4001 tanpa domain**
-
-Installer membuat sertifikat self-signed dan membuka UFW. Buka:
-
-```
-https://IP_VPS:4001/setup.html
-```
-
-UFW hanya firewall di VPS. Firewall provider tetap dibuka manual: Oracle Cloud Security List/NSG, AWS Security Group, GCP VPC Firewall, atau Cloud Firewall provider lain. Buka inbound TCP 4001, sebaiknya hanya dari IP operator (`IP/32`).
-
-Cocokkan fingerprint SHA-256 sertifikat dengan output installer sebelum melewati peringatan browser. Jangan membuka port internal 4002.
-
-## 9. Dependency Tambahan (opsional)
+Untuk melihat service PM2 saat boot, ganti `USER_DEPLOY` dengan deploy user:
 
 ```bash
-which certbot || sudo apt install certbot -y
-which fail2ban-client || sudo apt install fail2ban -y   # opsional, buat Security Manager
+systemctl status pm2-USER_DEPLOY
 ```
 
-## 10. Troubleshooting Cepat
+## 8. Update dan jalankan ulang
 
-| Gejala | Kemungkinan Penyebab | Cek |
+```bash
+cd /path/ke/vps-manager2
+git pull --ff-only
+sudo bash setup-otomatis.sh
+```
+
+Administrator yang sudah ada tidak dibuat ulang dan installer tidak
+menampilkan setup token baru. Database yang kredensialnya masih valid juga
+tidak di-reset.
+
+## 9. Troubleshooting
+
+| Gejala | Penyebab umum | Tindakan |
 |---|---|---|
-| Setup token hilang/kedaluwarsa | Token plaintext hanya tampil sekali / sudah lebih dari 24 jam | `vps-manager setup-token regenerate` |
-| IP:4001 tidak bisa dibuka tetapi UFW aktif | Firewall provider belum membuka port | Cek Security List/NSG/Security Group provider |
-| Lupa password admin | Password tidak dapat dilihat ulang | `vps-manager admin reset-password` |
-| `401 UNAUTHORIZED` di semua request API | Header `Authorization` salah/hilang, atau key sudah pernah di-generate ulang | Pastikan format `Bearer <key>`, generate ulang kalau lupa key lama |
-| Banyak fitur gagal dengan error permission | Sudoers belum di-setup | Jalankan `sudo bash scripts/setup-sudoers.sh`, atau cek `GET /doctor/permissions` / menu CLI **8. Permission Manager** |
-| Nginx/SSL Manager gagal baca config | `nginx_conf_dir`/`nginx_binary` di `data/config.json` tidak sesuai binary yang beneran aktif | Cek `ps aux \| grep nginx`, samakan path di Configuration |
-| `GET /nginx/sites/:file/error-log` balas `NGINX_LOG_FAILED` | File log domain belum ada, atau `nginx_log_dir` salah | Cek isi `nginx_log_dir` di Configuration, pastikan cocok lokasi log nginx yang aktif |
-| Deploy/SSL/Build job stuck di `interrupted` | API sempat restart/crash di tengah job | Job lama tidak bisa dilanjut otomatis — untuk deploy, cek `stoppedAtKey` lalu `POST /deploy/:jobId/retry` kalau memungkinkan |
-
-Untuk detail request/response tiap endpoint, lanjut ke **[docs/API.md](docs/API.md)**.
+| Setup token hilang/kedaluwarsa | Token hanya tampil saat dibuat atau sudah lewat 24 jam | Jalankan `node bin/vps-manager.js setup-token regenerate` |
+| IP:4001 tidak dapat dibuka | Firewall provider belum membuka port | Tambahkan inbound TCP 4001 di panel provider |
+| Lupa password admin | Password tidak dapat dilihat kembali | Jalankan `node bin/vps-manager.js admin reset-password` |
+| Domain hanya HTTP | DNS belum benar atau Certbot gagal | Perbaiki DNS, lalu terbitkan SSL dari menu SSL Manager |
+| PM2 tidak aktif setelah reboot | Service `pm2-USER_DEPLOY` gagal didaftarkan | Cek `systemctl status pm2-USER_DEPLOY` |
+| Nginx Manager gagal | Path Nginx tidak cocok dengan instalasi aktif | Periksa Configuration dan jalankan `sudo nginx -t` |
+| Banyak fitur gagal permission | Rule sudoers tidak lengkap/terhapus | Jalankan ulang `sudo bash setup-otomatis.sh` |

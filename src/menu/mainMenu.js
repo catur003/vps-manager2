@@ -483,7 +483,7 @@ async function configEditCategoryMenu() {
       name: 'category',
       message: 'Kategori mana yang mau diubah?',
       choices: [
-        { name: 'Deploy & Git (deploy_user, default_folder, git_branch, starting_port)', value: 'deploy' },
+        { name: 'Deploy & Git (deploy_user, default_folder, docker_projects_dir, git_branch, starting_port)', value: 'deploy' },
         { name: 'Nginx (nginx_user, nginx_binary, nginx_conf_dir, nginx_log_dir)', value: 'nginx' },
         { name: 'SSL / Certbot (certbot_webroot, certbot_email)', value: 'ssl' },
         { name: 'Database (db_root_user, db_root_password)', value: 'database' },
@@ -500,13 +500,14 @@ async function configEditCategoryMenu() {
   }
 
   if (category === 'deploy') {
-    const { deploy_user, default_folder, git_branch, starting_port } = await inquirer.prompt([
+    const { deploy_user, default_folder, docker_projects_dir, git_branch, starting_port } = await inquirer.prompt([
       { type: 'input', name: 'deploy_user', message: 'Deploy user:', default: cfg.deploy_user },
       { type: 'input', name: 'default_folder', message: 'Default folder:', default: cfg.default_folder },
+      { type: 'input', name: 'docker_projects_dir', message: 'Folder project Docker:', default: cfg.docker_projects_dir || '/opt/docker' },
       { type: 'input', name: 'git_branch', message: 'Git branch default:', default: cfg.git_branch },
       { type: 'number', name: 'starting_port', message: 'Starting port:', default: cfg.starting_port },
     ]);
-    config.saveConfig({ ...cfg, deploy_user, default_folder, git_branch, starting_port });
+    config.saveConfig({ ...cfg, deploy_user, default_folder, docker_projects_dir, git_branch, starting_port });
     logger.success('Konfigurasi Deploy & Git disimpan.');
   } else if (category === 'nginx') {
     logger.info(
@@ -2760,7 +2761,7 @@ async function backupManagerMenu() {
     const cfgForRestore = config.loadConfig();
     const { file, targetParentDir, deployUser } = await inquirer.prompt([
       { type: 'list', name: 'file', message: 'Pilih backup:', choices: projectBackups.map((b) => ({ name: `${b.filename} (${b.size}, ${b.createdAt})`, value: b.filename })) },
-      { type: 'input', name: 'targetParentDir', message: 'Restore ke folder induk mana (contoh: /www/wwwroot):' },
+      { type: 'input', name: 'targetParentDir', message: 'Restore ke folder induk mana (contoh: /opt/apps):' },
       { type: 'input', name: 'deployUser', message: 'Deploy user (owner file hasil restore):', default: cfgForRestore.deploy_user },
     ]);
     const { confirm } = await inquirer.prompt([

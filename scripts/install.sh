@@ -2,14 +2,16 @@
 #
 # install.sh - installer resmi vps-manager, one-shot dari SSH.
 #
-# CUMA ngurus level OS: package sistem, deploy user, clone repo,
-# npm install/link, sudoers. Sisanya (database, PM2, nginx, SSL, API key)
+# Ngurus seluruh instalasi: package sistem, deploy user, folder /opt,
+# npm, sudoers, database, PM2, nginx/SSL, dan setup administrator.
 # diserahin ke bin/vps-bootstrap.js - JANGAN reimplement logic itu di sini,
 # supaya gak ada 2 sumber kebenaran yang bisa divergen (lihat komentar
 # panjang di bin/vps-bootstrap.js soal kenapa).
 #
 # PAKAI:
-#   sudo bash scripts/install.sh
+#   git clone https://github.com/catur003/vps-manager2.git
+#   cd vps-manager2
+#   sudo bash setup-otomatis.sh
 #
 # Bisa non-interaktif penuh lewat env var (misal buat automation/testing):
 #   sudo INSTALL_PUBLIC_HOST=203.0.113.10 INSTALL_DEPLOY_USER=catur \
@@ -25,7 +27,7 @@ set -euo pipefail
 
 # --- 0. Wajib root ---
 if [ "$(id -u)" -ne 0 ]; then
-  echo "Script ini wajib dijalankan sebagai root/sudo: sudo bash scripts/install.sh" >&2
+  echo "Script ini wajib dijalankan sebagai root/sudo: sudo bash setup-otomatis.sh" >&2
   exit 1
 fi
 
@@ -35,10 +37,30 @@ echo "=================================================="
 echo
 
 # --- 1. Input (interaktif kalau env var belum diisi) ---
+DEFAULT_DEPLOY_USER=""
+if [ -n "${INSTALL_SOURCE_REPO:-}" ] && [ -e "${INSTALL_SOURCE_REPO}" ]; then
+  REPO_OWNER="$(stat -c '%U' "${INSTALL_SOURCE_REPO}" 2>/dev/null || true)"
+  if [ -n "$REPO_OWNER" ] && [ "$REPO_OWNER" != "root" ]; then
+    DEFAULT_DEPLOY_USER="$REPO_OWNER"
+  fi
+fi
+DEFAULT_DEPLOY_USER="${DEFAULT_DEPLOY_USER:-${SUDO_USER:-}}"
+if [ -z "$DEFAULT_DEPLOY_USER" ] || [ "$DEFAULT_DEPLOY_USER" = "root" ]; then
+  if id ubuntu >/dev/null 2>&1; then
+    DEFAULT_DEPLOY_USER="ubuntu"
+  else
+    DEFAULT_DEPLOY_USER="vpsmanager"
+  fi
+fi
+
 DEPLOY_USER="${INSTALL_DEPLOY_USER:-}"
 if [ -z "$DEPLOY_USER" ]; then
-  read -rp "Nama deploy user (dibuat kalau belum ada) [catur]: " DEPLOY_USER
-  DEPLOY_USER="${DEPLOY_USER:-catur}"
+  read -rp "Nama deploy user (dibuat kalau belum ada) [$DEFAULT_DEPLOY_USER]: " DEPLOY_USER
+  DEPLOY_USER="${DEPLOY_USER:-$DEFAULT_DEPLOY_USER}"
+fi
+if ! [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
+  echo "Nama deploy user tidak valid: $DEPLOY_USER" >&2
+  exit 1
 fi
 
 DOMAIN="${INSTALL_DOMAIN:-}"
@@ -69,6 +91,17 @@ fi
 
 REPO_URL="${INSTALL_REPO_URL:-https://github.com/catur003/vps-manager2.git}"
 REPO_DIRNAME="vps-manager2"
+SOURCE_REPO="${INSTALL_SOURCE_REPO:-}"
+APPS_DIR="${INSTALL_APPS_DIR:-/opt/apps}"
+DOCKER_DIR="${INSTALL_DOCKER_DIR:-/opt/docker}"
+CERTBOT_DIR="${INSTALL_CERTBOT_DIR:-/opt/certbot}"
+
+for required_path in "$APPS_DIR" "$DOCKER_DIR" "$CERTBOT_DIR"; do
+  if [[ "$required_path" != /* ]]; then
+    echo "Path instalasi wajib absolut: $required_path" >&2
+    exit 1
+  fi
+done
 
 # --- 2. Deteksi OS (dukungan resmi: Ubuntu 22.04/24.04) ---
 if [ -f /etc/os-release ]; then
@@ -86,7 +119,7 @@ apt-get install -y \
   git curl ca-certificates gnupg \
   openssl \
   nginx certbot \
-  default-mysql-client \
+  mariadb-server default-mysql-client \
   fail2ban \
   ufw \
   build-essential
@@ -140,19 +173,71 @@ else
   echo "User \"$DEPLOY_USER\" dibuat (tanpa password - akses cuma lewat sudo -u/root, sesuai desain)."
 fi
 DEPLOY_HOME="$(getent passwd "$DEPLOY_USER" | cut -d: -f6)"
-REPO_PATH="$DEPLOY_HOME/$REPO_DIRNAME"
 
-# --- 7. Clone / pull repo ---
-echo "--- Clone/update repo ke $REPO_PATH ---"
-if [ -d "$REPO_PATH/.git" ]; then
-  sudo -u "$DEPLOY_USER" git -C "$REPO_PATH" pull --ff-only
+echo "--- Setup folder kerja ---"
+install -d -m 0755 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "$APPS_DIR" "$DOCKER_DIR"
+install -d -m 0755 "$CERTBOT_DIR/.well-known/acme-challenge"
+
+# Fresh Ubuntu memakai Nginx paket distro. Kalau aaPanel benar-benar ada,
+# pertahankan path aaPanel agar installer juga aman buat server existing.
+if [ -x /www/server/nginx/sbin/nginx ] && [ -d /www/server/panel/vhost/nginx ]; then
+  NGINX_BINARY="${INSTALL_NGINX_BINARY:-/www/server/nginx/sbin/nginx}"
+  NGINX_CONF_DIR="${INSTALL_NGINX_CONF_DIR:-/www/server/panel/vhost/nginx}"
+  NGINX_LOG_DIR="${INSTALL_NGINX_LOG_DIR:-/www/wwwlogs}"
+  echo "Nginx aaPanel terdeteksi."
 else
-  sudo -u "$DEPLOY_USER" git clone "$REPO_URL" "$REPO_PATH"
+  NGINX_BINARY="${INSTALL_NGINX_BINARY:-/usr/sbin/nginx}"
+  NGINX_CONF_DIR="${INSTALL_NGINX_CONF_DIR:-/etc/nginx/sites-available}"
+  NGINX_LOG_DIR="${INSTALL_NGINX_LOG_DIR:-/var/log/nginx}"
+  echo "Nginx Ubuntu standar terdeteksi."
+fi
+
+# --- 7. Gunakan clone tempat setup-otomatis.sh dijalankan ---
+if [ -n "$SOURCE_REPO" ]; then
+  REPO_PATH="$(cd "$SOURCE_REPO" && pwd)"
+  if [ ! -d "$REPO_PATH/.git" ] || [ ! -f "$REPO_PATH/package.json" ]; then
+    echo "Folder sumber bukan clone vps-manager2 yang valid: $REPO_PATH" >&2
+    exit 1
+  fi
+  echo "--- Pakai repository hasil clone: $REPO_PATH ---"
+  chown -R "$DEPLOY_USER:$DEPLOY_USER" "$REPO_PATH"
+  if ! sudo -u "$DEPLOY_USER" test -x "$(dirname "$REPO_PATH")"; then
+    echo "Deploy user tidak bisa mengakses parent folder repository: $(dirname "$REPO_PATH")" >&2
+    echo "Clone repository dari home user biasa, jangan di bawah /root." >&2
+    exit 1
+  fi
+else
+  REPO_PATH="$DEPLOY_HOME/$REPO_DIRNAME"
+  echo "--- Clone/update repo ke $REPO_PATH ---"
+  if [ -d "$REPO_PATH/.git" ]; then
+    sudo -u "$DEPLOY_USER" git -C "$REPO_PATH" pull --ff-only
+  else
+    sudo -u "$DEPLOY_USER" git clone "$REPO_URL" "$REPO_PATH"
+  fi
 fi
 
 # --- 8. npm install ---
 echo "--- npm install ---"
 sudo -u "$DEPLOY_USER" bash -c "cd '$REPO_PATH' && npm install"
+
+# Database disiapkan saat installer masih root. Bootstrap/API setelah ini
+# berjalan sebagai deploy user dan tidak perlu sudo mysql/systemctl yang luas.
+echo "--- Setup MariaDB dan konfigurasi awal ---"
+if [ -f "$REPO_PATH/data/config.json" ]; then
+  PRESERVE_PLATFORM_CONFIG=1
+else
+  PRESERVE_PLATFORM_CONFIG=0
+fi
+BOOTSTRAP_DEPLOY_USER="$DEPLOY_USER" \
+BOOTSTRAP_APPS_DIR="$APPS_DIR" \
+BOOTSTRAP_DOCKER_DIR="$DOCKER_DIR" \
+BOOTSTRAP_CERTBOT_DIR="$CERTBOT_DIR" \
+BOOTSTRAP_NGINX_BINARY="$NGINX_BINARY" \
+BOOTSTRAP_NGINX_CONF_DIR="$NGINX_CONF_DIR" \
+BOOTSTRAP_NGINX_LOG_DIR="$NGINX_LOG_DIR" \
+BOOTSTRAP_PRESERVE_PLATFORM_CONFIG="$PRESERVE_PLATFORM_CONFIG" \
+node "$REPO_PATH/bin/vps-database-bootstrap.js"
+chown -R "$DEPLOY_USER:$DEPLOY_USER" "$REPO_PATH"
 
 # --- 9. npm link (biar command 'vps-manager' bisa dipanggil global) ---
 # FIXED: `sudo -u <user> npm link` dari direktori yang gak bisa diakses
@@ -216,7 +301,22 @@ sudo -u "$DEPLOY_USER" env \
   BOOTSTRAP_TLS_CERT="$TLS_CERT" \
   BOOTSTRAP_DEPLOY_USER="$DEPLOY_USER" \
   BOOTSTRAP_REPO_PATH="$REPO_PATH" \
+  BOOTSTRAP_APPS_DIR="$APPS_DIR" \
+  BOOTSTRAP_DOCKER_DIR="$DOCKER_DIR" \
+  BOOTSTRAP_CERTBOT_DIR="$CERTBOT_DIR" \
+  BOOTSTRAP_NGINX_BINARY="$NGINX_BINARY" \
+  BOOTSTRAP_NGINX_CONF_DIR="$NGINX_CONF_DIR" \
+  BOOTSTRAP_NGINX_LOG_DIR="$NGINX_LOG_DIR" \
+  BOOTSTRAP_PRESERVE_PLATFORM_CONFIG="$PRESERVE_PLATFORM_CONFIG" \
+  BOOTSTRAP_DEFER_PM2_STARTUP=1 \
   node "$REPO_PATH/bin/vps-bootstrap.js"
+
+# Registrasi systemd memang membutuhkan root. Dikerjakan di sini, bukan
+# meminta deploy user mengeksekusi command sudo dinamis dari output PM2.
+echo
+echo "--- Aktifkan PM2 saat boot ---"
+env PATH="$PATH" pm2 startup systemd -u "$DEPLOY_USER" --hp "$DEPLOY_HOME" >/dev/null
+sudo -u "$DEPLOY_USER" env HOME="$DEPLOY_HOME" PATH="$PATH" pm2 save >/dev/null
 
 # --- 12. Self-heal ownership final ---
 # FIXED: jaring pengaman terakhir, dijalankan SEBAGAI ROOT (cakupan paling
@@ -233,5 +333,5 @@ chown -R "$DEPLOY_USER:$DEPLOY_USER" "$REPO_PATH"
 echo
 echo "=================================================="
 echo " Instalasi selesai."
-echo " Simpan setup token yang ditampilkan di atas."
+echo " Kalau ini instalasi pertama, simpan setup token dan buka URL yang ditampilkan di atas."
 echo "=================================================="
