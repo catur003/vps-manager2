@@ -201,10 +201,23 @@ if [ -n "$SOURCE_REPO" ]; then
   fi
   echo "--- Pakai repository hasil clone: $REPO_PATH ---"
   chown -R "$DEPLOY_USER:$DEPLOY_USER" "$REPO_PATH"
+  # FIXED: di Ubuntu 24.04 home directory default-nya 750 (drwxr-x---), jadi
+  # clone di /home/<user-lain>/vps-manager2 TIDAK bisa di-traverse deploy user
+  # walau repo-nya sendiri sudah di-chown - installer abort di sini dan semua
+  # step setelahnya (npm install, database, sudoers, TLS, bootstrap, PM2)
+  # tidak pernah jalan, tapi dari luar kelihatannya cuma "port 4001 mati".
+  # Pesan lama ("jangan di bawah /root") misleading buat kasus ini. Solusinya
+  # cukup o+x di parent (traverse-only, orang lain tetap GAK BISA list isi
+  # home) - standar yang sama kayak kebutuhan nginx/www-data.
   if ! sudo -u "$DEPLOY_USER" test -x "$(dirname "$REPO_PATH")"; then
-    echo "Deploy user tidak bisa mengakses parent folder repository: $(dirname "$REPO_PATH")" >&2
-    echo "Clone repository dari home user biasa, jangan di bawah /root." >&2
-    exit 1
+    REPO_PARENT="$(dirname "$REPO_PATH")"
+    echo "Deploy user belum bisa traverse \"$REPO_PARENT\" (home 750?) - memberi izin traverse (o+x)..."
+    chmod o+x "$REPO_PARENT"
+    if ! sudo -u "$DEPLOY_USER" test -x "$REPO_PARENT"; then
+      echo "Deploy user tetap tidak bisa mengakses parent folder repository: $REPO_PARENT" >&2
+      echo "Clone repository dari home user biasa (permission 755), jangan di bawah /root." >&2
+      exit 1
+    fi
   fi
 else
   REPO_PATH="$DEPLOY_HOME/$REPO_DIRNAME"
