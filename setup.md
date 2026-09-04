@@ -139,29 +139,34 @@ Menu interaktif akan muncul — lihat daftar lengkap menu di [README.md](README.
 
 REST API dipakai kalau kamu mau kontrol VPS ini dari luar terminal — bot Telegram, mobile app, atau web GUI.
 
-**Langkah 1 — generate API key** (cuma perlu sekali; kalau diulang, key lama langsung invalid):
+**Login web pertama:** buat setup token yang berlaku 24 jam dan sekali pakai:
 ```bash
-node bin/vps-api-keygen.js
+vps-manager setup-token regenerate
 ```
-**Simpan key yang ditampilkan sekarang juga** — tidak akan ditampilkan lagi setelah ini (yang tersimpan di server cuma hash-nya, bukan key aslinya).
+Kalau token hilang, kedaluwarsa, atau terminal tertutup, jalankan command yang sama. Token lama langsung dibatalkan. Cek status dengan `vps-manager setup-status`.
 
-**Langkah 2 — jalankan API:**
+**Jalankan API:**
 ```bash
 node bin/vps-api.js
 # atau: npm run api
 ```
-Defaultnya jalan di `http://127.0.0.1:4001` (port bisa diubah lewat `data/config.json` → `api.port`, atau `PUT /config` — tapi field `api` sendiri **tidak** termasuk `EDITABLE_FIELDS` lewat API, harus edit `config.json` langsung untuk ganti port).
 
-**Langkah 3 — tes:**
+Mode domain memakai HTTP internal `127.0.0.1:4001`. Fresh install tanpa domain memakai internal `127.0.0.1:4002` dan direct HTTPS self-signed `0.0.0.0:4001`.
+
+**Tes internal:**
 ```bash
 curl http://127.0.0.1:4001/health
 # -> {"success":true,"message":"ok","data":{"time":"..."}}
-
-curl http://127.0.0.1:4001/monitor -H "Authorization: Bearer <API_KEY>"
-# -> {"success":true,"data":{"cpuPercent":...}}
 ```
 
-API **sengaja cuma bind ke `127.0.0.1`** — tidak pernah expose port ke internet langsung. Ini poin penting kalau kamu mau sambungkan mobile app: lihat langkah 8.
+Web dashboard memakai username/password dan session cookie. API key tetap khusus mobile, bot, atau script:
+
+```bash
+node bin/vps-api-keygen.js
+curl https://panel.example.com/monitor -H "Authorization: Bearer <API_KEY>"
+```
+
+Generate ulang API key membatalkan key lama, tetapi tidak mengeluarkan session web.
 
 ## 7. Jalankan API sebagai Service (PM2/systemd)
 
@@ -201,15 +206,26 @@ sudo systemctl status vps-manager-api
 
 ## 8. Expose API ke Internet (buat Mobile App/Bot)
 
-Karena API cuma bind ke `127.0.0.1`, mobile app di luar VPS **tidak bisa** langsung `hit` port 4001. Cara mengekspos yang aman: pakai domain + reverse proxy + SSL, sama seperti project lain yang di-manage tool ini.
+Ada dua mode akses:
 
-**Ringkasnya (lewat menu CLI atau API-nya sendiri):**
+**A. Domain + Nginx (disarankan permanen)**
+
 1. Arahkan sebuah domain/subdomain (mis. `api.domainkamu.com`) ke IP VPS ini (A record di DNS).
-2. Buat site reverse-proxy: **Nginx Manager (menu 6)** → domain `api.domainkamu.com`, port `4001` (port API-nya). Lewat API sendiri: `POST /nginx/sites` dengan `{ "domain": "api.domainkamu.com", "port": 4001 }`.
+2. Buat reverse proxy ke port internal API.
 3. Aktifkan HTTPS: **SSL Manager (menu 7)** untuk domain itu, atau `POST /ssl/issue` dengan `{ "domain": "api.domainkamu.com" }`.
-4. Setelah itu, mobile app/bot memanggil `https://api.domainkamu.com/...` (bukan `127.0.0.1:4001`), tetap wajib header `Authorization: Bearer <API_KEY>` yang sama.
+4. Browser memakai session; mobile/bot memakai Bearer API key.
 
-**Penting:** jangan pernah expose port 4001 langsung ke internet (mis. lewat `iptables`/security group cloud provider) — selalu lewat reverse proxy + SSL seperti di atas, supaya traffic API terenkripsi dan bisa dipasangi rate-limit/proteksi tambahan di level nginx kalau perlu nanti.
+**B. Direct IP:4001 tanpa domain**
+
+Installer membuat sertifikat self-signed dan membuka UFW. Buka:
+
+```
+https://IP_VPS:4001/setup.html
+```
+
+UFW hanya firewall di VPS. Firewall provider tetap dibuka manual: Oracle Cloud Security List/NSG, AWS Security Group, GCP VPC Firewall, atau Cloud Firewall provider lain. Buka inbound TCP 4001, sebaiknya hanya dari IP operator (`IP/32`).
+
+Cocokkan fingerprint SHA-256 sertifikat dengan output installer sebelum melewati peringatan browser. Jangan membuka port internal 4002.
 
 ## 9. Dependency Tambahan (opsional)
 
@@ -222,7 +238,9 @@ which fail2ban-client || sudo apt install fail2ban -y   # opsional, buat Securit
 
 | Gejala | Kemungkinan Penyebab | Cek |
 |---|---|---|
-| `API key belum di-generate` saat start API | Belum jalanin `vps-api-keygen.js` | Ulangi langkah 6.1 |
+| Setup token hilang/kedaluwarsa | Token plaintext hanya tampil sekali / sudah lebih dari 24 jam | `vps-manager setup-token regenerate` |
+| IP:4001 tidak bisa dibuka tetapi UFW aktif | Firewall provider belum membuka port | Cek Security List/NSG/Security Group provider |
+| Lupa password admin | Password tidak dapat dilihat ulang | `vps-manager admin reset-password` |
 | `401 UNAUTHORIZED` di semua request API | Header `Authorization` salah/hilang, atau key sudah pernah di-generate ulang | Pastikan format `Bearer <key>`, generate ulang kalau lupa key lama |
 | Banyak fitur gagal dengan error permission | Sudoers belum di-setup | Jalankan `sudo bash scripts/setup-sudoers.sh`, atau cek `GET /doctor/permissions` / menu CLI **8. Permission Manager** |
 | Nginx/SSL Manager gagal baca config | `nginx_conf_dir`/`nginx_binary` di `data/config.json` tidak sesuai binary yang beneran aktif | Cek `ps aux \| grep nginx`, samakan path di Configuration |

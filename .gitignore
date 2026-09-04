@@ -12,6 +12,9 @@ data/db-registry.json
 data/registry.json
 data/.secret.key
 data/alert-state.json
+data/auth.json
+data/.auth.lock
+data/tls/
 data/bandwidth-history.json
 
 # Logs

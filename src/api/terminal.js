@@ -2,7 +2,7 @@ const os = require('os');
 const pty = require('node-pty');
 const { WebSocketServer } = require('ws');
 const url = require('url');
-const config = require('../config/config');
+const { authenticateUpgrade } = require('./middleware/auth');
 
 const MAX_SESSIONS = 5; // batasi jumlah terminal bersamaan biar gak dipakai buat fork-bomb resource kalau key bocor
 const activeSessions = new Set();
@@ -56,7 +56,7 @@ function attachTerminalServer(httpServer) {
     const { pathname, query } = url.parse(req.url, true);
     if (pathname !== '/terminal') return; // biarin path lain (kalau ada ws lain nanti) gak kesenggol
 
-    if (!config.verifyApiKey(query.key)) {
+    if (!authenticateUpgrade(req, query.key)) {
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();
       return;

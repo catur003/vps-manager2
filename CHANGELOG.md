@@ -3,6 +3,29 @@
 Changelog lama dihapus & mulai dari sini lagi sesuai permintaan. Riwayat fase
 sebelumnya masih ada di histori chat kalau sewaktu-waktu dibutuhkan.
 
+
+## Fase - Web Login, First-Run Setup, Direct HTTPS (2026-09-04)
+
+### Added
+- Login web username/password dengan password `scrypt`, session server-side,
+  cookie `HttpOnly; Secure; SameSite=Strict`, CSRF token, dan logout.
+- Setup administrator pertama memakai token acak sekali pakai yang berlaku
+  24 jam. Token lama dapat dibatalkan/dibuat ulang lewat
+  `vps-manager setup-token regenerate`; status lewat `setup-status`.
+- Proteksi setup paralel lintas proses memakai file lock + atomic write.
+  Setelah admin ada, setup token dihapus dan tidak dapat membuat admin kedua.
+- Recovery password lokal lewat `vps-manager admin reset-password`, sekaligus
+  mencabut semua session lama.
+- Fresh install tanpa domain: direct HTTPS self-signed di port publik 4001,
+  backend internal tetap loopback di 4002. Installer mencetak fingerprint dan
+  instruksi firewall provider secara terpisah dari UFW.
+
+### Changed
+- Dashboard tidak lagi menyimpan credential manusia di `localStorage`.
+- WebSocket Terminal/Docker memakai session cookie; query API key dipertahankan
+  hanya untuk kompatibilitas client lama.
+- API key lama tetap valid untuk mobile/bot/script dan instalasi lama, sehingga
+  upgrade tidak langsung memutus client yang sudah terhubung.
 ## Fase - Git Push, Installer Backend, Ownership Self-Heal (2026-08-21)
 
 ### Added (Git Push - baru, backend + mobile)

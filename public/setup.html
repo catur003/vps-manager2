@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Setup Administrator - VPS Manager</title>
+<style>
+  :root {
+    --bg:#0b0e14;--card:#131722;--border:#2c3345;--ink:#f8fafc;
+    --muted:#9aa3b7;--accent:#7c6cf0;--accent-hover:#6b5bdd;
+    --danger:#fca5a5;--danger-bg:#2a1418;--success:#4ade80;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;min-height:100vh;padding:24px;display:flex;align-items:center;
+    justify-content:center;background:radial-gradient(circle at 25% 15%,#1b2033 0%,var(--bg) 62%);
+    color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  main{
+    width:100%;max-width:480px;background:rgba(19,23,34,.96);
+    border:1px solid var(--border);border-radius:18px;padding:32px;
+    box-shadow:0 20px 60px rgba(0,0,0,.5);
+  }
+  .logo{
+    width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,var(--accent),#5b4bc4);
+    display:flex;align-items:center;justify-content:center;font:700 21px monospace;
+    box-shadow:0 8px 20px rgba(124,108,240,.35);margin-bottom:20px;
+  }
+  h1{font-size:21px;margin:0 0 7px}
+  .intro{color:var(--muted);font-size:13.5px;line-height:1.55;margin:0 0 24px}
+  .field{margin-bottom:15px}
+  label{display:block;font-size:12.5px;font-weight:600;margin-bottom:6px}
+  .helper{display:block;color:var(--muted);font-size:11.5px;font-weight:400;margin-top:5px}
+  input{
+    width:100%;min-height:46px;padding:11px 13px;border-radius:10px;
+    border:1px solid var(--border);background:#0d1119;color:var(--ink);font-size:14px;
+  }
+  input:focus-visible,button:focus-visible{outline:3px solid rgba(124,108,240,.42);outline-offset:2px}
+  input[aria-invalid="true"]{border-color:#ef4444}
+  .password-wrap{position:relative}
+  .password-wrap input{padding-right:48px}
+  .toggle{
+    position:absolute;right:5px;top:5px;width:36px;height:36px;padding:7px;
+    display:flex;align-items:center;justify-content:center;background:transparent;
+    color:var(--muted);border:0;border-radius:8px;cursor:pointer;
+  }
+  .toggle svg{width:19px;height:19px}
+  .error{
+    display:none;background:var(--danger-bg);border:1px solid #5b2630;color:var(--danger);
+    border-radius:10px;padding:11px 12px;font-size:12.5px;line-height:1.45;margin-bottom:16px;
+  }
+  .error.show{display:block}
+  .success{
+    display:none;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.38);
+    color:var(--success);border-radius:10px;padding:12px;font-size:13px;line-height:1.5;
+  }
+  button.primary{
+    width:100%;min-height:46px;border:0;border-radius:10px;background:var(--accent);
+    color:#fff;font-size:14px;font-weight:650;cursor:pointer;transition:background .18s,transform .18s;
+  }
+  button.primary:hover{background:var(--accent-hover)}
+  button.primary:active{transform:translateY(1px)}
+  button:disabled{opacity:.55;cursor:not-allowed}
+  .foot{
+    margin-top:20px;padding-top:16px;border-top:1px solid var(--border);
+    color:var(--muted);font-size:11.5px;line-height:1.6;
+  }
+  code{background:#0d1119;padding:2px 5px;border-radius:4px;color:#cbd5e1}
+  [hidden]{display:none!important}
+  @media(max-width:520px){body{padding:14px}main{padding:25px 20px;border-radius:15px}}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<main aria-labelledby="page-title">
+  <div class="logo" aria-hidden="true">VM</div>
+  <div id="loading">
+    <h1 id="page-title">Memeriksa status setup</h1>
+    <p class="intro">Tunggu sebentar, VPS Manager sedang memeriksa apakah administrator sudah tersedia.</p>
+  </div>
+
+  <section id="setup-panel" hidden>
+    <h1>Buat administrator pertama</h1>
+    <p class="intro">Token berasal dari terminal instalasi. Kredensial ini hanya digunakan untuk login manusia ke web panel.</p>
+    <div id="setup-error" class="error" role="alert" tabindex="-1"></div>
+    <form id="setup-form" novalidate>
+      <div class="field">
+        <label for="setup-token">Setup token</label>
+        <input id="setup-token" name="token" type="password" autocomplete="one-time-code" required />
+        <span class="helper">Token berlaku 24 jam dan hanya dapat digunakan sekali.</span>
+      </div>
+      <div class="field">
+        <label for="username">Username</label>
+        <input id="username" name="username" type="text" autocomplete="username" minlength="3" maxlength="32" pattern="[A-Za-z0-9_.-]+" required />
+        <span class="helper">3-32 karakter: huruf, angka, titik, dash, atau underscore.</span>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <div class="password-wrap">
+          <input id="password" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="256" required />
+          <button class="toggle" type="button" data-target="password" aria-label="Tampilkan password">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <span class="helper">Minimal 12 karakter. Paste dan password manager tetap didukung.</span>
+      </div>
+      <div class="field">
+        <label for="password-confirm">Ulangi password</label>
+        <div class="password-wrap">
+          <input id="password-confirm" name="passwordConfirm" type="password" autocomplete="new-password" minlength="12" maxlength="256" required />
+          <button class="toggle" type="button" data-target="password-confirm" aria-label="Tampilkan konfirmasi password">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+      <button class="primary" id="submit" type="submit">Buat Administrator</button>
+    </form>
+    <div id="setup-success" class="success" role="status">
+      Administrator berhasil dibuat. Kamu akan diarahkan ke halaman login.
+    </div>
+    <div class="foot">
+      Token hilang atau kedaluwarsa? Masuk SSH lalu jalankan
+      <code>vps-manager setup-token regenerate</code>.
+    </div>
+  </section>
+
+  <section id="unavailable-panel" hidden>
+    <h1>Setup belum tersedia</h1>
+    <p class="intro" id="unavailable-message"></p>
+    <div class="foot">Masuk SSH lalu jalankan <code>vps-manager setup-token regenerate</code>.</div>
+  </section>
+</main>
+<script>
+const loading = document.getElementById('loading');
+const panel = document.getElementById('setup-panel');
+const unavailable = document.getElementById('unavailable-panel');
+const errorBox = document.getElementById('setup-error');
+const form = document.getElementById('setup-form');
+const submit = document.getElementById('submit');
+
+function showError(message, field = null) {
+  errorBox.textContent = message;
+  errorBox.classList.add('show');
+  errorBox.focus();
+  if (field) {
+    field.setAttribute('aria-invalid', 'true');
+    field.focus();
+  }
+}
+
+document.querySelectorAll('input').forEach((input) => {
+  input.addEventListener('blur', () => {
+    input.setAttribute('aria-invalid', input.checkValidity() ? 'false' : 'true');
+  });
+});
+
+document.querySelectorAll('.toggle').forEach((button) => {
+  button.addEventListener('click', () => {
+    const input = document.getElementById(button.dataset.target);
+    const reveal = input.type === 'password';
+    input.type = reveal ? 'text' : 'password';
+    button.setAttribute('aria-label', reveal ? 'Sembunyikan password' : 'Tampilkan password');
+  });
+});
+
+async function loadStatus() {
+  try {
+    const response = await fetch('/auth/status', { cache: 'no-store' });
+    const body = await response.json();
+    const state = body.data;
+    loading.hidden = true;
+    if (state.initialized) {
+      location.replace('/dashboard.html');
+      return;
+    }
+    if (!state.setupEnabled || state.setupExpired) {
+      unavailable.hidden = false;
+      document.getElementById('unavailable-message').textContent = state.setupExpired
+        ? 'Setup token sudah kedaluwarsa. Buat token baru melalui SSH untuk melanjutkan.'
+        : 'Belum ada setup token aktif untuk server ini.';
+      return;
+    }
+    panel.hidden = false;
+    document.getElementById('setup-token').focus();
+  } catch {
+    loading.querySelector('.intro').textContent = 'Gagal menghubungi layanan autentikasi. Periksa apakah VPS Manager masih berjalan.';
+  }
+}
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  errorBox.classList.remove('show');
+  [...form.elements].forEach((field) => field.removeAttribute?.('aria-invalid'));
+  if (!form.checkValidity()) {
+    const invalid = form.querySelector(':invalid');
+    showError('Periksa kembali field yang belum valid.', invalid);
+    return;
+  }
+  const password = document.getElementById('password');
+  const confirm = document.getElementById('password-confirm');
+  if (password.value !== confirm.value) {
+    showError('Konfirmasi password tidak sama.', confirm);
+    return;
+  }
+  submit.disabled = true;
+  submit.textContent = 'Membuat administrator...';
+  try {
+    const response = await fetch('/auth/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: document.getElementById('setup-token').value,
+        username: document.getElementById('username').value.trim(),
+        password: password.value,
+        passwordConfirm: confirm.value,
+      }),
+    });
+    const body = await response.json();
+    if (!response.ok || !body.success) throw new Error(body.message || 'Setup gagal.');
+    form.hidden = true;
+    document.getElementById('setup-success').style.display = 'block';
+    setTimeout(() => location.replace('/dashboard.html'), 1200);
+  } catch (error) {
+    showError(error.message);
+    submit.disabled = false;
+    submit.textContent = 'Buat Administrator';
+  }
+});
+
+loadStatus();
+</script>
+</body>
+</html>

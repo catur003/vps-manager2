@@ -27,15 +27,16 @@ Mini DevOps CLI pribadi buat gantiin aaPanel — kelola banyak project (Next.js,
 
 Hampir semua menu di atas sudah punya endpoint REST yang setara — Deploy (async/job), Git, PM2, Nginx (termasuk error log per domain), SSL (issue), Database, Backup, Security, Scanner, Cleanup, Configuration (+ akun GitHub, cocok buat halaman Settings di mobile app), Doctor/Permission, dan `.env`/delete project.
 
-- **Setup lengkap** (generate API key, jalanin sebagai service, expose ke internet lewat Nginx + SSL buat mobile app): lihat **[setup.md](setup.md#6-setup-rest-api)**.
+- **Setup lengkap** (akun admin, session web, direct IP:4001 atau domain, API key untuk automation): lihat **[setup.md](setup.md#6-setup-rest-api)**.
 - **Referensi tiap endpoint** (request/response, kode error, mana yang butuh `confirm`): lihat **[docs/API.md](docs/API.md)**.
 
 Ringkas:
 ```bash
-node bin/vps-api-keygen.js   # generate API key - CATET, cuma ditampilin sekali
-node bin/vps-api.js          # start API di 127.0.0.1:4001 (localhost only, tidak pernah expose langsung)
+vps-manager setup-token regenerate  # token setup admin 24 jam, sekali pakai
+node bin/vps-api.js                  # start API
+node bin/vps-api-keygen.js           # opsional: API key mobile/bot/script
 ```
-Auth pakai header `Authorization: Bearer <api key>` di semua endpoint kecuali `GET /health`. Aksi yang mengubah data lama secara permanen (drop database, hapus project, dll) wajib `{ "confirm": true }` di body. Aksi yang bisa makan waktu lama (deploy, issue SSL, build manual) berjalan async — API langsung balas `jobId`, status dicek lewat `GET /jobs/:id`. Semua request tercatat di `data/audit.log` (field sensitif otomatis di-redact).
+Web memakai username/password + session cookie; mobile/bot/script tetap memakai `Authorization: Bearer <api key>`. Aksi yang mengubah data lama secara permanen (drop database, hapus project, dll) wajib `{ "confirm": true }`. Semua request tercatat di `data/audit.log` dengan field sensitif di-redact.
 
 ## Keamanan
 

@@ -56,25 +56,56 @@ Dokumentasi lengkap semua endpoint REST API `vps-manager`. API ini dibuat supaya
 
 ### Base URL
 
-API cuma bind ke `127.0.0.1` di VPS (lihat [setup.md](../setup.md) untuk alasannya dan cara expose ke luar lewat Nginx + SSL). Semua path di dokumen ini relatif terhadap base URL itu, misal:
+API memiliki listener internal untuk Nginx. Fresh install tanpa domain juga dapat memakai direct HTTPS self-signed di port publik 4001. Semua path relatif terhadap base URL:
 
 ```
 http://127.0.0.1:4001/pm2
 https://api.domainkamu.com/pm2   (kalau sudah di-proxy)
+https://IP_VPS:4001/pm2          (mode direct HTTPS)
 ```
 
 ### Autentikasi
 
-Semua endpoint **kecuali `GET /health`** wajib header:
+Web dashboard memakai session cookie `HttpOnly; Secure; SameSite=Strict`. Login:
+
+```http
+POST /auth/login
+Content-Type: application/json
+
+{ "username": "admin", "password": "..." }
+```
+
+Request mutasi dari session web wajib membawa `X-CSRF-Token`; dashboard mengurusnya otomatis. Mobile, bot, dan script tetap memakai:
 
 ```
 Authorization: Bearer <API_KEY>
 ```
 
-`API_KEY` didapat sekali dari `node bin/vps-api-keygen.js` (lihat setup.md). Kalau header hilang/salah, response:
+`API_KEY` dibuat dengan `node bin/vps-api-keygen.js`. Generate ulang membatalkan key lama tanpa memengaruhi session web.
+
+Endpoint publik yang tidak membutuhkan session/Bearer:
+
+| Method | Path | Keterangan |
+|---|---|---|
+| GET | `/health` | Health check minimal |
+| GET | `/auth/status` | Status initialized/setup token tanpa data rahasia |
+| POST | `/auth/setup` | Buat admin pertama dengan setup token |
+| POST | `/auth/login` | Buat session web |
+| GET | `/auth/session` | Validasi session cookie |
+| POST | `/auth/logout` | Hapus session aktif |
+
+`POST /auth/setup`:
 
 ```json
-{ "success": false, "message": "API key tidak valid atau tidak disertakan.", "code": "UNAUTHORIZED" }
+{ "token": "...", "username": "admin", "password": "...", "passwordConfirm": "..." }
+```
+
+Setup token berlaku 24 jam, sekali pakai, dan diregenerasi lewat `vps-manager setup-token regenerate`. Setelah admin terbentuk, endpoint setup tidak dapat membuat admin kedua.
+
+Kalau autentikasi hilang/salah:
+
+```json
+{ "success": false, "message": "Session atau API key tidak valid.", "code": "UNAUTHORIZED" }
 ```
 HTTP status `401`.
 
@@ -704,7 +735,7 @@ Container Docker biasa (bukan Docker Compose — lihat section terpisah di bawah
 | POST | `/docker/:name/stop` | sync | – | Stop |
 | POST | `/docker/:name/restart` | sync | – | Restart |
 
-**Terminal masuk container**: bukan lewat REST, tapi WebSocket `wss://.../docker-exec?key=<apikey>&container=<name>&shell=sh|bash` — pola sama seperti `/terminal` (lihat bawah), tapi jalanin `docker exec -it <container> sh/bash`. Divalidasi ulang di server: nama container harus ada di `docker ps -a` sebelum PTY di-spawn.
+**Terminal masuk container**: bukan lewat REST, tapi WebSocket `wss://.../docker-exec?container=<name>&shell=sh|bash`. Dashboard memakai session cookie; client lama dapat menambahkan `key=<apikey>`. Nama container divalidasi terhadap `docker ps -a` sebelum PTY di-spawn.
 
 ---
 
@@ -849,7 +880,7 @@ Engine kedua selain MySQL/MariaDB (section `Database` di atas) — API terpisah 
 
 ## Terminal (WebSocket)
 
-Bukan REST — koneksi `wss://.../terminal?key=<apikey>&user=<optional>`. Default jalan sebagai user proses API (`deploy_user`), bisa switch ke user lain yang di-whitelist eksplisit (`ubuntu`) via query `?user=`. Auth API key dicek SEBELUM PTY di-spawn (bukan header, karena WebSocket handshake browser gak bisa nyetel `Authorization` custom). Ping/pong keepalive tiap 25 detik, auto-reconnect di sisi client kalau putus.
+Bukan REST. Dashboard memakai session cookie otomatis: `wss://.../terminal?user=<optional>`. Client lama/API masih dapat memakai `?key=<apikey>`. Default jalan sebagai user proses API (`deploy_user`), dan user lain harus ada di whitelist eksplisit. Auth dicek sebelum PTY di-spawn. Ping/pong keepalive tiap 25 detik.
 
 ---
 

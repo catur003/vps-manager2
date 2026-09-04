@@ -1,4 +1,5 @@
 const config = require('../../config/config');
+const authStore = require('../../auth/authStore');
 
 /**
  * Lockout per-IP buat percobaan API key yang GAGAL. Alasannya BUKAN buat
@@ -77,16 +78,39 @@ function apiKeyAuth(req, res, next) {
     ? header.slice('Bearer '.length).trim()
     : (req.query.key || null);
 
-  if (!config.verifyApiKey(token)) {
-    recordFailure(ip);
-    return res.status(401).json({
-      success: false,
-      message: 'API key tidak valid atau tidak disertakan.',
-      code: 'UNAUTHORIZED',
-    });
+  if (config.verifyApiKey(token)) {
+    recordSuccess(ip);
+    req.auth = { type: 'api-key' };
+    return next();
   }
-  recordSuccess(ip);
-  next();
+
+  const unsafe = !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
+  const csrfToken = unsafe ? req.get('x-csrf-token') : null;
+  const session = authStore.verifySession(authStore.getSessionToken(req), csrfToken);
+  let validOrigin = true;
+  const origin = req.get('origin');
+  if (origin) {
+    try { validOrigin = new URL(origin).host === req.get('host'); } catch { validOrigin = false; }
+  }
+  if (session && (!unsafe || (csrfToken && validOrigin))) {
+    recordSuccess(ip);
+    req.auth = { type: 'session', username: session.username };
+    return next();
+  }
+
+  recordFailure(ip);
+  return res.status(401).json({
+    success: false,
+    message: authStore.status().initialized ? 'Session atau API key tidak valid.' : 'Administrator belum dibuat. Selesaikan setup terlebih dahulu.',
+    code: 'UNAUTHORIZED',
+  });
 }
 
-module.exports = { apiKeyAuth };
+function authenticateUpgrade(req, legacyKey = null) {
+  if (config.verifyApiKey(legacyKey)) return { type: 'api-key' };
+  const session = authStore.verifySession(authStore.getSessionToken(req));
+  return session ? { type: 'session', username: session.username } : null;
+}
+
+
+module.exports = { apiKeyAuth, authenticateUpgrade };

@@ -29,7 +29,12 @@
  * step ngecek dulu apa udah beres sebelum ngerjain ulang).
  *
  * ENV VAR yang dibaca:
- *   BOOTSTRAP_DOMAIN       (wajib) - domain buat vps-manager-api sendiri
+ *   BOOTSTRAP_DOMAIN       (opsional kalau direct HTTPS aktif)
+ *   BOOTSTRAP_DIRECT_HTTPS (1 untuk akses langsung via IP)
+ *   BOOTSTRAP_PUBLIC_HOST  (IP/hostname yang dibuka user)
+ *   BOOTSTRAP_PUBLIC_PORT  (default: 4001)
+ *   BOOTSTRAP_TLS_KEY      (path private key self-signed)
+ *   BOOTSTRAP_TLS_CERT     (path certificate self-signed)
  *   BOOTSTRAP_DEPLOY_USER  (opsional, default: $USER proses ini)
  *   BOOTSTRAP_PORT         (opsional, default: 4001)
  *   BOOTSTRAP_REPO_PATH    (opsional, default: cwd proses ini)
@@ -37,6 +42,7 @@
 
 const path = require('path');
 const config = require('../src/config/config');
+const authStore = require('../src/auth/authStore');
 const database = require('../src/database/database');
 const nginx = require('../src/nginx/nginx');
 const ssl = require('../src/ssl/ssl');
@@ -46,12 +52,19 @@ const logger = require('../src/utils/logger');
 
 async function main() {
   const domain = process.env.BOOTSTRAP_DOMAIN;
+  const directHttps = process.env.BOOTSTRAP_DIRECT_HTTPS === '1';
+  const publicHost = process.env.BOOTSTRAP_PUBLIC_HOST || '';
+  const publicPort = parseInt(process.env.BOOTSTRAP_PUBLIC_PORT || '4001', 10);
   const deployUser = process.env.BOOTSTRAP_DEPLOY_USER || process.env.USER;
-  const port = parseInt(process.env.BOOTSTRAP_PORT || '4001', 10);
+  const port = parseInt(process.env.BOOTSTRAP_PORT || (directHttps ? '4002' : '4001'), 10);
   const repoPath = process.env.BOOTSTRAP_REPO_PATH || process.cwd();
 
-  if (!domain) {
-    logger.error('BOOTSTRAP_DOMAIN wajib diisi (domain buat vps-manager-api sendiri, mis. api.zenlab.id). Contoh: BOOTSTRAP_DOMAIN=api.zenlab.id node bin/vps-bootstrap.js');
+  if (!domain && !directHttps) {
+    logger.error('Isi BOOTSTRAP_DOMAIN atau aktifkan BOOTSTRAP_DIRECT_HTTPS=1.');
+    process.exit(1);
+  }
+  if (directHttps && (!publicHost || !process.env.BOOTSTRAP_TLS_KEY || !process.env.BOOTSTRAP_TLS_CERT)) {
+    logger.error('Direct HTTPS butuh BOOTSTRAP_PUBLIC_HOST, BOOTSTRAP_TLS_KEY, dan BOOTSTRAP_TLS_CERT.');
     process.exit(1);
   }
   if (!deployUser) {
@@ -60,7 +73,7 @@ async function main() {
   }
 
   logger.title('vps-manager Bootstrap');
-  logger.info(`Domain: ${domain} | Deploy user: ${deployUser} | Port: ${port} | Repo: ${repoPath}`);
+  logger.info(`Akses: ${domain || ('https://' + publicHost + ':' + publicPort)} | Deploy user: ${deployUser} | Port internal: ${port}`);
 
   // 0/6 - Self-heal ownership SEBELUM apa-apa lagi (FIXED, laporan Zen
   // berulang: config.json/data/ kena EACCES pas dibaca proses PM2 yang
@@ -87,21 +100,34 @@ async function main() {
   }
   logger.success(dbResult.message);
 
-  // 2/6 - API key
-  logger.section('2/6 - Generate API Key');
-  const existingHash = config.loadConfig().api?.key_hash;
-  if (existingHash) {
-    logger.warn(
-      'API key sudah pernah di-generate sebelumnya - dilewatin (biar client lama yang masih pakai key itu gak ' +
-      'langsung ke-reject). Jalankan "node bin/vps-api-keygen.js" manual kalau memang mau generate ulang.'
-    );
+  // 2/6 - Auth web. API key sekarang opsional dan dibuat setelah login.
+  logger.section('2/6 - Setup Administrator');
+  const cfg = config.loadConfig();
+  cfg.api = {
+    ...(cfg.api || {}),
+    port,
+    public_port: publicPort,
+    public_url: domain ? `https://${domain}` : `https://${publicHost}:${publicPort}`,
+    direct_https: directHttps ? {
+      enabled: true,
+      key_path: process.env.BOOTSTRAP_TLS_KEY,
+      cert_path: process.env.BOOTSTRAP_TLS_CERT,
+    } : (cfg.api?.direct_https || { enabled: false, key_path: '', cert_path: '' }),
+  };
+  config.saveConfig(cfg);
+  const authState = authStore.status();
+  let setupToken = null;
+  if (authState.initialized) {
+    logger.info('Administrator sudah ada - setup token dilewati.');
   } else {
-    const apiKey = config.generateApiKey();
-    logger.card(
-      'API KEY - SIMPAN SEKARANG, GAK BAKAL DITAMPILIN LAGI SETELAH INI',
-      [apiKey, '', 'Pasang di app sebagai header:', `Authorization: Bearer ${apiKey}`],
-      { color: 'red' }
-    );
+    setupToken = authStore.generateSetupToken();
+    logger.card('SETUP TOKEN - SIMPAN SEKARANG', [
+      setupToken.token,
+      '',
+      `Buka: ${cfg.api.public_url}/setup.html`,
+      `Berlaku sampai: ${setupToken.expiresAt}`,
+      'Kalau hilang/kedaluwarsa: vps-manager setup-token regenerate',
+    ], { color: 'red' });
   }
 
   // 3/6 - PM2 start + boot persistence
@@ -147,6 +173,20 @@ async function main() {
     } else {
       logger.warn('Gagal generate command PM2 startup - lewati, boot persistence perlu disetel manual: pm2 startup');
     }
+  }
+
+  if (!domain) {
+    logger.title('Bootstrap Selesai');
+    logger.card('Akses Langsung', [
+      `Panel        : ${cfg.api.public_url}/setup.html`,
+      `Port publik  : ${publicPort} (HTTPS self-signed)`,
+      `Port internal: ${port} (localhost only)`,
+      '',
+      'UFW sudah dibuka installer. Buka TCP port yang sama juga di',
+      'firewall provider VPS (OCI Security List/NSG, AWS Security Group, dst).',
+      'Cocokkan fingerprint sertifikat dari output installer.',
+    ]);
+    return;
   }
 
   // 4/6 - Register ke registry
@@ -209,8 +249,8 @@ async function main() {
     `Deploy user: ${deployUser}`,
     `Repo path : ${repoPath}`,
     '',
-    'Kalau API key ditampilkan di atas (step 2/6), SIMPAN SEKARANG - gak',
-    'akan ditampilin lagi. Buka app, masukin domain + API key itu buat konek.',
+    `Setup admin: https://${domain}/setup.html`,
+    'API token untuk mobile/bot dapat dibuat terpisah setelah login.',
   ]);
 }
 

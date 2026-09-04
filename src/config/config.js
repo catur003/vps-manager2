@@ -45,6 +45,14 @@ const DEFAULT_CONFIG = {
   // sekali pas di-generate (lihat generateApiKey()), gak pernah disimpen.
   api: {
     port: 4001,
+    // Direct HTTPS dipakai fresh install yang belum punya domain.
+    public_port: 4001,
+    public_url: '',
+    direct_https: {
+      enabled: false,
+      key_path: '',
+      cert_path: '',
+    },
     key_hash: '',
     key_salt: '',
   },

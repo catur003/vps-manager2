@@ -1,8 +1,8 @@
 const pty = require('node-pty');
 const { WebSocketServer } = require('ws');
 const url = require('url');
-const config = require('../config/config');
 const shell = require('../utils/shell');
+const { authenticateUpgrade } = require('./middleware/auth');
 
 const MAX_SESSIONS = 5;
 const activeSessions = new Set();
@@ -42,7 +42,7 @@ function attachDockerExecServer(httpServer) {
     const { pathname, query } = url.parse(req.url, true);
     if (pathname !== '/docker-exec') return;
 
-    if (!config.verifyApiKey(query.key)) {
+    if (!authenticateUpgrade(req, query.key)) {
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();
       return;

@@ -321,16 +321,19 @@
   }
   .login-card h1 { font-size: 19px; margin: 0 0 6px; }
   .login-card p.sub { color: var(--ink-muted); font-size: 13px; margin: 0 0 24px; line-height: 1.5; }
-  .login-field { position: relative; margin-bottom: 14px; }
+  .login-field { position: relative; margin-bottom: 15px; }
+  .login-field label { display:block; font-size:12.5px; font-weight:600; margin-bottom:6px; }
   .login-field input {
-    width: 100%; padding: 13px 44px 13px 14px; font-size: 13.5px;
+    width: 100%; min-height:46px; padding: 12px 44px 12px 14px; font-size: 13.5px;
     border-radius: 10px; background: #0d1119;
   }
+  .login-field input:focus-visible, .login-card button:focus-visible { outline:3px solid rgba(124,108,240,.42); outline-offset:2px; }
   .login-field button.toggle-eye {
-    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    position: absolute; right: 6px; bottom: 5px; width:36px; height:36px;
     background: transparent; border: none; color: var(--ink-muted);
-    padding: 6px 8px; font-size: 15px;
+    padding: 7px; display:flex; align-items:center; justify-content:center;
   }
+  .login-field button.toggle-eye svg { width:19px; height:19px; }
   .login-card .btn-login { width: 100%; padding: 12px; font-size: 14px; margin-top: 4px; }
   .login-error {
     display: none; align-items: center; gap: 8px;
@@ -392,7 +395,7 @@
     </div>
     <div style="display:flex;gap:6px">
       <button id="theme-toggle-btn" class="secondary" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px" title="Ganti Tema"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg><span class="full-label">Tema</span></button>
-      <button id="logout-btn" class="secondary" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px" title="Ganti API Key"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span class="full-label">Key</span></button>
+      <button id="logout-btn" class="secondary" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px" title="Keluar dari dashboard"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span class="full-label">Keluar</span></button>
     </div>
   </div>
 </div>
@@ -400,15 +403,23 @@
 <div id="login-screen">
   <div class="login-card">
     <div class="login-logo">VM</div>
-    <h1>vps-manager</h1>
-    <p class="sub">Masukkan API key buat akses dashboard. Key tersimpan cuma di browser kamu (localStorage), gak dikirim ke mana pun selain server ini.</p>
-    <div class="login-error" id="login-error">⚠ <span id="login-error-text">API key salah atau server gak bisa dihubungi.</span></div>
-    <div class="login-field">
-      <input id="apikey-input" type="password" placeholder="Bearer token / API key" autocomplete="off" />
-      <button type="button" class="toggle-eye" id="toggle-eye" title="Tampilkan/sembunyikan">👁</button>
-    </div>
-    <button class="btn-login" id="apikey-save">Masuk</button>
-    <div class="login-hint">Belum punya key? Generate lewat terminal server:<br /><code>node bin/vps-api-keygen.js</code></div>
+    <h1 id="login-title">Masuk ke VPS Manager</h1>
+    <p class="sub" id="login-subtitle">Gunakan akun administrator yang dibuat saat setup pertama.</p>
+    <div class="login-error" id="login-error" role="alert" tabindex="-1"><span id="login-error-text"></span></div>
+    <form id="password-login-form">
+      <div class="login-field"><label for="login-username">Username</label><input id="login-username" type="text" autocomplete="username" required /></div>
+      <div class="login-field">
+        <label for="login-password">Password</label>
+        <input id="login-password" type="password" autocomplete="current-password" required />
+        <button type="button" class="toggle-eye" id="toggle-eye" aria-label="Tampilkan password"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+      </div>
+      <button class="btn-login" id="password-login-btn" type="submit">Masuk</button>
+    </form>
+    <form id="legacy-login-form" hidden>
+      <div class="login-field"><label for="apikey-input">API key lama</label><input id="apikey-input" type="password" autocomplete="off" /></div>
+      <button class="btn-login" id="apikey-save" type="submit">Masuk sementara</button>
+      <div class="login-hint">Instalasi lama belum punya admin. Buat token setup lewat SSH:<br /><code>vps-manager setup-token regenerate</code></div>
+    </form>
   </div>
 </div>
 
@@ -849,58 +860,114 @@
 <script>
 const API_BASE = window.location.origin;
 let API_KEY = localStorage.getItem('vps_api_key') || '';
+let AUTH_READY = false;
+let AUTH_MODE = null;
+let CSRF_TOKEN = '';
 
 const loginScreen = document.getElementById('login-screen');
 const loginInput = document.getElementById('apikey-input');
-const loginBtn = document.getElementById('apikey-save');
+const passwordForm = document.getElementById('password-login-form');
+const legacyForm = document.getElementById('legacy-login-form');
+const loginBtn = document.getElementById('password-login-btn');
 const loginError = document.getElementById('login-error');
 const loginErrorText = document.getElementById('login-error-text');
 
-function showLogin(errorMsg) {
+function cookieValue(name) {
+  const prefix = name + '=';
+  const part = document.cookie.split(';').map((value) => value.trim()).find((value) => value.startsWith(prefix));
+  return part ? decodeURIComponent(part.slice(prefix.length)) : '';
+}
+
+function showLogin(errorMsg, legacy = false) {
   loginScreen.style.display = 'flex';
-  if (errorMsg) { loginErrorText.textContent = errorMsg; loginError.classList.add('show'); }
+  passwordForm.hidden = legacy;
+  legacyForm.hidden = !legacy;
+  document.getElementById('login-title').textContent = legacy ? 'Akses instalasi lama' : 'Masuk ke VPS Manager';
+  document.getElementById('login-subtitle').textContent = legacy
+    ? 'API key tetap tersedia sementara sampai akun administrator selesai dibuat.'
+    : 'Gunakan akun administrator yang dibuat saat setup pertama.';
+  if (errorMsg) {
+    loginErrorText.textContent = errorMsg;
+    loginError.classList.add('show');
+    loginError.focus();
+  }
   else { loginError.classList.remove('show'); }
-  setTimeout(() => loginInput.focus(), 50);
+  setTimeout(() => (legacy ? loginInput : document.getElementById('login-username')).focus(), 50);
 }
 function hideLogin() { loginScreen.style.display = 'none'; }
 
 document.getElementById('toggle-eye').onclick = () => {
-  loginInput.type = loginInput.type === 'password' ? 'text' : 'password';
+  const input = document.getElementById('login-password');
+  const reveal = input.type === 'password';
+  input.type = reveal ? 'text' : 'password';
+  document.getElementById('toggle-eye').setAttribute('aria-label', reveal ? 'Sembunyikan password' : 'Tampilkan password');
 };
 
-async function tryLogin(key) {
-  loginBtn.disabled = true;
-  loginBtn.textContent = 'Memeriksa...';
+function finishLogin(mode) {
+  AUTH_READY = true;
+  AUTH_MODE = mode;
+  CSRF_TOKEN = cookieValue('vps_csrf');
+  hideLogin();
+  refreshCurrentPage();
+  refreshSidebarResources();
+}
+
+async function tryPasswordLogin(username, password) {
+  loginBtn.disabled = true; loginBtn.textContent = 'Memeriksa...';
   try {
-    const res = await fetch(API_BASE + '/monitor', { headers: { Authorization: 'Bearer ' + key } });
-    if (res.status === 401) throw new Error('API key salah/tidak valid.');
-    if (!res.ok) throw new Error('Server merespons error (HTTP ' + res.status + ').');
-    API_KEY = key;
-    localStorage.setItem('vps_api_key', key);
-    hideLogin();
+    const res = await fetch(API_BASE + '/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const body = await res.json();
+    if (!res.ok || !body.success) throw new Error(body.message || 'Login gagal.');
+    localStorage.removeItem('vps_api_key'); API_KEY = '';
+    finishLogin('session');
     toast('Berhasil masuk.', 'success');
-    refreshCurrentPage();
-    refreshSidebarResources();
   } catch (e) {
-    showLogin(e.message.includes('fetch') ? 'Gagal menghubungi server API.' : e.message);
+    showLogin(e.message.includes('fetch') ? 'Gagal menghubungi server.' : e.message);
   } finally {
-    loginBtn.disabled = false;
-    loginBtn.textContent = 'Masuk';
+    loginBtn.disabled = false; loginBtn.textContent = 'Masuk';
   }
 }
 
-loginBtn.onclick = () => {
-  const key = loginInput.value.trim();
-  if (!key) { showLogin('API key gak boleh kosong.'); return; }
-  tryLogin(key);
-};
-loginInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') loginBtn.click(); });
+async function tryLegacyLogin(key) {
+  const button = document.getElementById('apikey-save');
+  button.disabled = true; button.textContent = 'Memeriksa...';
+  try {
+    const res = await fetch(API_BASE + '/monitor', { headers: { Authorization: 'Bearer ' + key } });
+    if (!res.ok) throw new Error(res.status === 401 ? 'API key salah atau tidak valid.' : `Server merespons HTTP ${res.status}.`);
+    API_KEY = key; localStorage.setItem('vps_api_key', key);
+    finishLogin('api-key');
+    toast('Masuk memakai API key lama.', 'success');
+  } catch (e) { showLogin(e.message, true); }
+  finally { button.disabled = false; button.textContent = 'Masuk sementara'; }
+}
 
-document.getElementById('logout-btn').onclick = () => {
+passwordForm.onsubmit = (event) => {
+  event.preventDefault();
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  if (!username || !password) return showLogin('Username dan password wajib diisi.');
+  tryPasswordLogin(username, password);
+};
+
+legacyForm.onsubmit = (event) => {
+  event.preventDefault();
+  const key = loginInput.value.trim();
+  if (!key) return showLogin('API key tidak boleh kosong.', true);
+  tryLegacyLogin(key);
+};
+
+document.getElementById('logout-btn').onclick = async () => {
+  if (AUTH_MODE === 'session') {
+    await fetch(API_BASE + '/auth/logout', { method: 'POST' }).catch(() => {});
+  }
   localStorage.removeItem('vps_api_key');
-  API_KEY = '';
-  loginInput.value = '';
-  showLogin();
+  API_KEY = ''; CSRF_TOKEN = ''; AUTH_READY = false; AUTH_MODE = null;
+  document.getElementById('login-password').value = '';
+  await bootstrapAuth();
 };
 
 function toast(msg, type = '') {
@@ -912,12 +979,20 @@ function toast(msg, type = '') {
 }
 
 async function api(path, opts = {}) {
+  const method = (opts.method || 'GET').toUpperCase();
+  const authHeaders = {};
+  if (AUTH_MODE === 'api-key' && API_KEY) authHeaders.Authorization = 'Bearer ' + API_KEY;
+  if (AUTH_MODE === 'session' && !['GET', 'HEAD', 'OPTIONS'].includes(method)) authHeaders['X-CSRF-Token'] = CSRF_TOKEN;
   const res = await fetch(API_BASE + path, {
     ...opts,
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + API_KEY, ...(opts.headers || {}) },
+    headers: { 'Content-Type': 'application/json', ...authHeaders, ...(opts.headers || {}) },
   });
   const json = await res.json().catch(() => ({ success: false, message: 'Response bukan JSON valid' }));
   document.getElementById('conn-dot').className = 'dot ' + (res.status === 401 ? 'red' : 'green');
+  if (res.status === 401 && AUTH_MODE === 'session') {
+    AUTH_READY = false; AUTH_MODE = null; CSRF_TOKEN = '';
+    showLogin('Session sudah berakhir. Silakan masuk lagi.');
+  }
   if (!json.success) throw new Error(json.message || ('HTTP ' + res.status));
   return json.data;
 }
@@ -1032,7 +1107,7 @@ document.querySelectorAll('.nav-item').forEach((item) => {
     item.classList.add('active');
     document.getElementById('page-' + page).classList.add('active');
     currentPage = page;
-    if (API_KEY) REFRESHERS[page]?.();
+    if (AUTH_READY) REFRESHERS[page]?.();
   };
 });
 function refreshCurrentPage() { REFRESHERS[currentPage]?.(); }
@@ -1880,7 +1955,7 @@ function gotoPage(page) {
   document.querySelector(`[data-page="${page}"]`)?.classList.add('active');
   document.getElementById('page-' + page)?.classList.add('active');
   currentPage = page;
-  if (API_KEY) REFRESHERS[page]?.();
+  if (AUTH_READY) REFRESHERS[page]?.();
 }
 function switchToDeployPageForJobView() { gotoPage('deployments'); }
 async function openEnvModal(name) {
@@ -2210,7 +2285,8 @@ async function backupDatabase() {
   catch (e) { toast('Gagal backup: ' + e.message, 'error'); }
 }
 function downloadBackup(filename) {
-  window.open(`${API_BASE}/backup/${encodeURIComponent(filename)}/download?key=${encodeURIComponent(API_KEY)}`, '_blank');
+  const suffix = AUTH_MODE === 'api-key' ? `?key=${encodeURIComponent(API_KEY)}` : '';
+  window.open(`${API_BASE}/backup/${encodeURIComponent(filename)}/download${suffix}`, '_blank');
 }
 function deleteBackup(filename) {
   showConfirmModal({
@@ -3054,7 +3130,8 @@ function fmDelete(fullPath) {
   });
 }
 function fmDownload(fullPath) {
-  window.open(`${API_BASE}/filemanager/download?path=${encodeURIComponent(fullPath)}&key=${encodeURIComponent(API_KEY)}`, '_blank');
+  const keyParam = AUTH_MODE === 'api-key' ? `&key=${encodeURIComponent(API_KEY)}` : '';
+  window.open(`${API_BASE}/filemanager/download?path=${encodeURIComponent(fullPath)}${keyParam}`, '_blank');
 }
 function fmUpload(input) {
   const file = input.files[0];
@@ -3062,7 +3139,10 @@ function fmUpload(input) {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('path', fmCurrentPath);
-  fetch(`${API_BASE}/filemanager/upload`, { method: 'POST', headers: { Authorization: 'Bearer ' + API_KEY }, body: formData })
+  const headers = AUTH_MODE === 'api-key'
+    ? { Authorization: 'Bearer ' + API_KEY }
+    : { 'X-CSRF-Token': CSRF_TOKEN };
+  fetch(`${API_BASE}/filemanager/upload`, { method: 'POST', headers, body: formData })
     .then((r) => r.json())
     .then((json) => {
       if (!json.success) throw new Error(json.message);
@@ -3284,8 +3364,10 @@ function openTerminalSocket() {
   const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const selectedUser = document.getElementById('terminal-user-select').value;
   document.getElementById('terminal-warning').style.display = selectedUser === 'ubuntu' ? 'block' : 'none';
-  const userParam = selectedUser ? `&user=${encodeURIComponent(selectedUser)}` : '';
-  termSocket = new WebSocket(`${wsProtocol}//${location.host}/terminal?key=${encodeURIComponent(API_KEY)}${userParam}`);
+  const params = new URLSearchParams();
+  if (AUTH_MODE === 'api-key') params.set('key', API_KEY);
+  if (selectedUser) params.set('user', selectedUser);
+  termSocket = new WebSocket(`${wsProtocol}//${location.host}/terminal?${params}`);
 
   termSocket.onopen = () => {
     termReconnectAttempt = 0;
@@ -3394,7 +3476,9 @@ function openDockerExecSocket() {
   const shellChoice = document.getElementById('dockerexec-shell-select').value;
   if (!container) return;
   const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  dockerExecSocket = new WebSocket(`${wsProtocol}//${location.host}/docker-exec?key=${encodeURIComponent(API_KEY)}&container=${encodeURIComponent(container)}&shell=${encodeURIComponent(shellChoice)}`);
+  const params = new URLSearchParams({ container, shell: shellChoice });
+  if (AUTH_MODE === 'api-key') params.set('key', API_KEY);
+  dockerExecSocket = new WebSocket(`${wsProtocol}//${location.host}/docker-exec?${params}`);
 
   dockerExecSocket.onopen = () => {
     dockerExecReconnectAttempt = 0;
@@ -3978,15 +4062,44 @@ function cfToggleUnderAttack(domain, enabled) {
 }
 
 // ---------- Boot ----------
-if (API_KEY) {
-  loginInput.value = API_KEY;
-  tryLogin(API_KEY);
-} else {
-  showLogin();
+async function bootstrapAuth() {
+  loginScreen.style.display = 'flex';
+  try {
+    const statusResponse = await fetch(API_BASE + '/auth/status', { cache: 'no-store' });
+    const statusBody = await statusResponse.json();
+    const state = statusBody.data;
+    if (!state.initialized) {
+      if (state.setupEnabled && !state.setupExpired) {
+        location.replace('/setup.html');
+        return;
+      }
+      if (API_KEY) {
+        loginInput.value = API_KEY;
+        await tryLegacyLogin(API_KEY);
+      } else {
+        showLogin(state.setupExpired ? 'Setup token kedaluwarsa. Regenerasi token lewat SSH.' : null, true);
+      }
+      return;
+    }
+    localStorage.removeItem('vps_api_key');
+    API_KEY = '';
+    const sessionResponse = await fetch(API_BASE + '/auth/session', { cache: 'no-store' });
+    if (sessionResponse.ok) {
+      finishLogin('session');
+      return;
+    }
+    AUTH_READY = false;
+    AUTH_MODE = null;
+    CSRF_TOKEN = '';
+    showLogin();
+  } catch {
+    showLogin('Gagal menghubungi layanan autentikasi.');
+  }
 }
+bootstrapAuth();
 
 async function refreshSidebarResources() {
-  if (!API_KEY) return;
+  if (!AUTH_READY) return;
   try {
     const s = await api('/monitor');
     const diskAgg = s.disk?.aggregate || s.disk;

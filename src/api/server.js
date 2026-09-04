@@ -35,6 +35,7 @@ const webhookRoutes = require('./routes/webhook.routes');
 const cloudflareRoutes = require('./routes/cloudflare.routes');
 const redisRoutes = require('./routes/redis.routes');
 const postgresRoutes = require('./routes/postgres.routes');
+const authRoutes = require('./routes/auth.routes');
 const config = require('../config/config');
 const ssl = require('../ssl/ssl');
 const notify = require('../notify/notify');
@@ -104,6 +105,10 @@ function createServer() {
   // disimpan di localStorage browser, dikirim sebagai header Authorization),
   // bukan lewat proteksi di level penyajian file statis.
   app.use(express.static(path.join(__dirname, '..', '..', 'public')));
+
+  // Setup/login/session adalah satu-satunya API publik selain health.
+  // Masing-masing endpoint sensitif punya rate-limit sendiri.
+  app.use('/auth', authRoutes);
 
   // Health check TANPA auth - buat uptime checker/load balancer, gak
   // ngasih info apapun soal server selain "API-nya nyala".

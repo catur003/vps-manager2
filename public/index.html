@@ -94,15 +94,15 @@
       <span class="status-text">Online</span>
     </div>
     <h1>vps-manager</h1>
-    <p>REST API buat kelola VPS dari ZenVPS App - deploy, database, nginx, SSL, dan lainnya. Semua endpoint di bawah ini butuh API key (header <code>Authorization: Bearer &lt;key&gt;</code>), kecuali <code>/health</code>.</p>
+    <p>Control plane VPS untuk web dashboard, mobile, dan automation. Web memakai session aman; mobile/bot tetap dapat memakai <code>Authorization: Bearer &lt;key&gt;</code>.</p>
     <div class="meta">
       <div class="meta-row">
         <span class="meta-label">Health check</span>
         <span class="meta-value">GET /health</span>
       </div>
       <div class="meta-row">
-        <span class="meta-label">Autentikasi</span>
-        <span class="meta-value">Bearer token</span>
+        <span class="meta-label">Autentikasi web</span>
+        <span class="meta-value">Session</span>
       </div>
     </div>
     <div class="footer">Diakses lewat aplikasi ZenVPS.</div>
