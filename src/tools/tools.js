@@ -79,6 +79,31 @@ function findTool(key) {
 }
 
 /**
+ * Engine database yang SALING CONFLICT di level apt: install satu berarti
+ * apt DIAM-DIAM membuang yang satunya lagi. Dan karena /var/lib/mysql masih
+ * berisi data file format engine lama (tidak kompatibel), engine barunya
+ * gagal start - hasilnya persis laporan user: MariaDB dari setup-otomatis
+ * sehat, klik "MySQL Server" di menu ini, lalu semua fitur database mati
+ * dengan ERROR 2003 dan kredensial di config.json nyangkut ke database yang
+ * sudah tidak ada. installTool() menolak kombinasi ini lebih awal dengan
+ * pesan jelas, alih-alih membiarkan apt merusak instalasi yang sedang dipakai.
+ */
+const DB_ENGINE_CONFLICTS = {
+  mysql: { name: 'MariaDB Server', checkPkgs: ['mariadb-server'] },
+  mariadb: { name: 'MySQL Server', checkPkgs: ['mysql-server-8.0', 'mysql-server'] },
+};
+
+/**
+ * Cek package BENERAN terinstall penuh (status "installed"), bukan cuma
+ * sisa config (`dpkg -s` masih balikin sukses buat state "config-files"
+ * setelah apt remove tanpa purge - false positive kalau cuma cek exit code).
+ */
+function isPkgInstalled(pkg) {
+  const r = shell.runArgs('dpkg-query', ['-W', '-f=${db:Status-Status}', pkg], { silent: true });
+  return r.ok && r.output.trim() === 'installed';
+}
+
+/**
  * Deteksi terinstall/tidaknya tiap tool via `which` (gak butuh sudo, cuma
  * baca PATH). Buat tool yang checkBin-nya null (plugin, bukan binary
  * mandiri), dicek via `dpkg -s <pkg>` sebagai gantinya.
@@ -113,6 +138,19 @@ function detectTools() {
 function installTool(key) {
   const tool = findTool(key);
   if (!tool) return { ok: false, errorMessage: `Tool "${key}" tidak dikenal.` };
+
+  // Guard konflik engine database (lihat DB_ENGINE_CONFLICTS di atas).
+  const conflict = DB_ENGINE_CONFLICTS[key];
+  if (conflict && conflict.checkPkgs.some(isPkgInstalled)) {
+    return {
+      ok: false,
+      errorMessage:
+        `${tool.name} TIDAK jadi diinstall: ${conflict.name} sedang terinstall & dipakai di server ini. ` +
+        `Keduanya saling konflik di apt - install ${tool.name} akan MEMBUANG ${conflict.name} beserta akses database yang ada, ` +
+        `dan engine barunya kemungkinan besar gagal start karena data lama tidak kompatibel. ` +
+        `Kalau memang mau pindah engine: backup semua database dulu, uninstall ${conflict.name} dari menu ini, baru install ${tool.name}.`,
+    };
+  }
 
   const updateResult = shell.runArgs('sudo', ['apt-get', 'update'], { timeoutMs: 2 * 60 * 1000 });
   if (!updateResult.ok) {

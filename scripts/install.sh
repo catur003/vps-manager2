@@ -257,8 +257,16 @@ chown -R "$DEPLOY_USER:$DEPLOY_USER" "$REPO_PATH"
 # user itu (mis. dijalanin dari /root atau /home/user-lain) bisa gagal
 # EACCES pas Node coba chdir ke situ SEBELUM exec - selalu jalanin dari
 # DALAM repo path yang jelas-jelas sudah dimiliki deploy_user.
+# FIXED: npm link sebagai deploy user hampir pasti gagal EACCES ("syscall
+# symlink", path "../../../home/...") - global prefix Node dari apt/NodeSource
+# adalah /usr, jadi bikin symlink di /usr/lib/node_modules + /usr/bin WAJIB
+# root, sedangkan deploy user memang by-design tanpa privilege itu. Masalah
+# EACCES chdir yang dulu jadi alasan hindari root (komentar di atas) CUMA
+# berlaku untuk user non-root - root bebas chdir ke mana aja. Kalau ada file
+# repo yang ke-create sebagai root oleh npm, sudah dijamin beres oleh
+# self-heal chown di akhir script.
 echo "--- npm link (global CLI) ---"
-sudo -u "$DEPLOY_USER" bash -c "cd '$REPO_PATH' && npm link" || \
+(cd "$REPO_PATH" && npm link) || \
   echo "PERINGATAN: npm link gagal - command 'vps-manager' mungkin gak kepasang global, tapi service tetap bisa jalan normal lewat PM2. Bisa dicoba manual belakangan: cd $REPO_PATH && sudo npm link"
 
 # --- 10. Sudoers scoped (WAJIB, bukan opsional) ---
