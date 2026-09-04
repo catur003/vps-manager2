@@ -12,7 +12,19 @@ const TOOLS = [
   { key: 'certbot', name: 'Certbot (Let\'s Encrypt)', category: 'Web Server', checkBin: 'certbot', pkg: 'certbot' },
   { key: 'certbot-nginx', name: 'Certbot Nginx Plugin', category: 'Web Server', checkBin: null, pkg: 'python3-certbot-nginx' },
   // --- Database ---
-  { key: 'mysql', name: 'MySQL Server', category: 'Database', checkBin: 'mysql', pkg: 'mysql-server' },
+  // FIXED: `mysql` binary dari `mariadb-client-core` (dependency terpisah,
+  // gak ikut kehapus pas uninstall `mysql-server`, dan ke-share juga sama
+  // MariaDB - bikin entry ini SELALU keliatan "terinstall" walau
+  // mysql-server aslinya gak pernah ke-install). `mysql-server` sendiri
+  // biasanya meta/transitional package, checkBin:null (dpkg -s) akurat.
+  { key: 'mysql', name: 'MySQL Server', category: 'Database', checkBin: null, pkg: 'mysql-server' },
+  // Entry TERPISAH dari 'mysql' di atas - di Ubuntu, `mysql-server` bisa
+  // resolve ke MariaDB (transitional package) ATAU MySQL asli tergantung
+  // repo yang aktif pas install. VPS ini ternyata pakai MariaDB murni
+  // (`mariadb-server`, bukan lewat nama paket `mysql-server` sama sekali),
+  // jadi entry `mysql` di atas gak pernah bisa akurat ngedeteksi/uninstall
+  // database yang beneran jalan di server ini - butuh entry sendiri.
+  { key: 'mariadb', name: 'MariaDB Server', category: 'Database', checkBin: null, pkg: 'mariadb-server' },
   // FIXED (laporan user: "udah hapus redis tapi status tetep terinstall"):
   // `psql`/`checkBin` sebelumnya dari `postgresql-client-common` - package
   // TERPISAH dari `postgresql` (pkg yang beneran di-install/remove tombol
@@ -26,7 +38,18 @@ const TOOLS = [
   { key: 'redis', name: 'Redis', category: 'Database', checkBin: 'redis-server', pkg: 'redis-server' },
   { key: 'memcached', name: 'Memcached', category: 'Database', checkBin: 'memcached', pkg: 'memcached' },
   // --- Runtime & Build ---
-  { key: 'docker', name: 'Docker Engine', category: 'Runtime', checkBin: 'docker', pkg: 'docker.io' },
+  // FIXED: `docker` binary ke-share sama `docker-ce-cli` (varian resmi),
+  // jadi entry ini SELALU keliatan "terinstall" walau yang beneran
+  // keinstall itu Docker CE, bukan docker.io. checkBin:null (dpkg -s
+  // docker.io) akurat ngebedain dua-duanya.
+  { key: 'docker', name: 'Docker Engine (docker.io)', category: 'Runtime', checkBin: null, pkg: 'docker.io' },
+  // Entry TERPISAH - Docker CE resmi (dari repo Docker sendiri, bukan repo
+  // Ubuntu) DAN docker.io SAMA-SAMA nyediain binary `docker`, jadi entry
+  // `docker` di atas gak bisa dipakai buat ngedeteksi/uninstall varian CE
+  // secara akurat (checkBin ketemu walau yang keinstall CE, bukan docker.io -
+  // dan `apt-get remove docker.io` gak ngefek apa-apa ke CE). VPS ini
+  // ternyata pakai Docker CE, bukan docker.io - butuh entry sendiri.
+  { key: 'docker-ce', name: 'Docker CE (resmi)', category: 'Runtime', checkBin: null, pkg: 'docker-ce' },
   // FIXED: `make` dari package `make` sendiri (dependency terpisah dari
   // `build-essential`, gak ikut kehapus). `build-essential` meta-package
   // tanpa binary sendiri, checkBin:null (dpkg -s) yang akurat.
