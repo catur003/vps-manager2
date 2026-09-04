@@ -7,7 +7,7 @@
 # dashboard biar ketauan kalau ada job yang diam-diam gagal terus tanpa
 # perlu buka log manual satu-satu.
 #
-# Usage: cron-wrapper.sh <jobId> '<command asli lengkap>'
+# Usage: cron-wrapper.sh <jobId> '<command asli lengkap>' [nama-base64url]
 set -u
 
 JOB_ID="$1"

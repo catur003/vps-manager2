@@ -83,14 +83,24 @@ function findTool(key) {
  * baca PATH). Buat tool yang checkBin-nya null (plugin, bukan binary
  * mandiri), dicek via `dpkg -s <pkg>` sebagai gantinya.
  */
+function getPackageVersion(pkg) {
+  const result = shell.runArgs('dpkg-query', ['-W', '-f=${Version}', pkg], { silent: true });
+  return result.ok && result.output ? result.output.trim() : null;
+}
+
 function detectTools() {
   return TOOLS.map((t) => {
-    if (t.checkBin) {
-      const result = shell.runArgs('which', [t.checkBin], { silent: true });
-      return { key: t.key, name: t.name, category: t.category, installed: result.ok && !!result.output };
-    }
-    const result = shell.runArgs('dpkg', ['-s', t.pkg], { silent: true });
-    return { key: t.key, name: t.name, category: t.category, installed: result.ok };
+    const installed = t.checkBin
+      ? (() => { const result = shell.runArgs('which', [t.checkBin], { silent: true }); return result.ok && !!result.output; })()
+      : shell.runArgs('dpkg', ['-s', t.pkg], { silent: true }).ok;
+    return {
+      key: t.key,
+      name: t.name,
+      category: t.category,
+      packageName: t.pkg,
+      installed,
+      version: installed ? getPackageVersion(t.pkg) : null,
+    };
   });
 }
 

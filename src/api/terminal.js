@@ -3,6 +3,7 @@ const pty = require('node-pty');
 const { WebSocketServer } = require('ws');
 const url = require('url');
 const { authenticateUpgrade } = require('./middleware/auth');
+const config = require('../config/config');
 
 const MAX_SESSIONS = 5; // batasi jumlah terminal bersamaan biar gak dipakai buat fork-bomb resource kalau key bocor
 const activeSessions = new Set();

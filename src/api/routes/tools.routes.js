@@ -23,8 +23,12 @@ router.post('/:key/install', (req, res) => {
   const ACTION = 'tools.install';
   if (!guard(ACTION, res)) return;
   const { key } = req.params;
+  const policy = commandPolicy.getPolicy(ACTION);
   if (!tools.findTool(key)) {
     return res.status(400).json({ success: false, message: `Tool "${key}" tidak dikenal.`, code: 'INVALID_INPUT' });
+  }
+  if (policy.confirmRequired && req.body?.confirm !== true) {
+    return res.status(400).json({ success: false, message: `Konfirmasi diperlukan untuk install "${key}".`, code: 'CONFIRM_REQUIRED' });
   }
 
   const startedAt = Date.now();

@@ -301,6 +301,117 @@
   .kv-row .kv-label { display: flex; align-items: center; gap: 8px; }
   .kv-row b { color: var(--ink); font-family: monospace; font-weight: 600; }
 
+  /* ---------- Operations workspaces ---------- */
+  .workspace-head { margin-bottom: 18px; }
+  .workspace-head .topbar { margin-bottom: 5px; }
+  .workspace-subtitle { margin: 0; color: var(--ink-muted); font-size: 12.5px; line-height: 1.55; }
+  .toolbar-card {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 12px; margin-bottom: 16px; background: var(--card);
+    border: 1px solid var(--border); border-radius: 12px;
+  }
+  .toolbar-card .toolbar-grow { flex: 1; min-width: 210px; }
+  .toolbar-card input, .toolbar-card select { min-height: 40px; }
+  .panel-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 13px 16px; border-bottom: 1px solid var(--border); }
+  .panel-head h2, .panel-head h3 { margin: 0; color: var(--ink); font-size: 13px; text-transform: none; letter-spacing: 0; }
+  .mini-label { color: var(--ink-muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; }
+  .compact-button { min-height: 34px; padding: 6px 10px; font-size: 11.5px; }
+  .icon-button { width: 34px; height: 34px; padding: 7px; display: inline-flex; align-items: center; justify-content: center; }
+  .icon-button svg { width: 16px; height: 16px; }
+
+  .data-table-wrap { width: 100%; overflow-x: auto; }
+  .data-table { width: 100%; min-width: 780px; border-collapse: collapse; font-size: 12px; }
+  .data-table th { padding: 10px 14px; text-align: left; color: var(--ink-muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; background: var(--card-hover); }
+  .data-table td { padding: 11px 14px; border-top: 1px solid var(--border); vertical-align: middle; }
+  .data-table tbody tr:hover { background: var(--card-hover); }
+  .table-actions { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+
+  .fm-shell { min-height: 0; }
+  .fm-scroll { max-height: calc(100vh - 245px); min-height: 320px; overflow: auto; scrollbar-gutter: stable; }
+  .fm-entry { border: 0; border-bottom: 1px solid var(--border); border-radius: 0; padding: 10px 14px; }
+  .fm-entry:last-child { border-bottom: 0; }
+  .fm-entry-main { display: flex; align-items: center; gap: 10px; min-width: 0; overflow: hidden; }
+  .fm-entry-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+  .dockerexec-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 14px; }
+  .terminal-panel { min-width: 0; background: #080b10; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .terminal-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: #0e121b; }
+  .terminal-lights { display: flex; gap: 6px; }
+  .terminal-lights i { width: 8px; height: 8px; border-radius: 50%; background: #374151; }
+  .terminal-lights i:nth-child(1) { background: #ef4444; }
+  .terminal-lights i:nth-child(2) { background: #eab308; }
+  .terminal-lights i:nth-child(3) { background: #22c55e; }
+  #dockerexec-container { height: 62vh; min-height: 380px; padding: 10px; }
+  .dockerexec-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .quick-command-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .quick-command-grid button { text-align: left; font-family: monospace; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dockerexec-empty { height: 62vh; min-height: 380px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; color: var(--ink-muted); text-align: center; padding: 24px; }
+  .dockerexec-empty svg { width: 34px; height: 34px; color: #2596ec; }
+
+  .cron-dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(280px, .75fr); gap: 14px; margin-top: 14px; }
+  .cron-side-stack { display: flex; flex-direction: column; gap: 14px; }
+  .cron-helper { padding: 14px 16px; }
+  .cron-helper-code { margin: 10px 0; padding: 10px 12px; background: #080b10; border: 1px solid var(--border); border-radius: 8px; font-family: monospace; color: #c4b5fd; word-break: break-all; }
+  .cron-preset-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+  .cron-preset { padding: 10px 8px; background: var(--card-hover); border: 1px solid var(--border); border-radius: 9px; text-align: center; cursor: pointer; transition: border-color .15s, transform .15s; }
+  .cron-preset:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .cron-preset b { display: block; font-size: 11px; margin-bottom: 4px; }
+  .cron-preset code { color: var(--ink-muted); font-size: 10px; }
+  .cron-mini-list { padding: 8px 14px; }
+  .cron-mini-row { display: flex; align-items: center; gap: 9px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 11.5px; }
+  .cron-mini-row:last-child { border-bottom: 0; }
+  .cron-mini-row .cron-mini-main { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tips-card { border-color: rgba(234,179,8,.45); background: rgba(234,179,8,.045); padding: 14px 16px; }
+  .tips-card ul { margin: 8px 0 0; padding-left: 17px; color: var(--ink-muted); font-size: 11.5px; line-height: 1.7; }
+
+  .tools-summary { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+  .tools-category { margin-bottom: 22px; }
+  .tools-category-head { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .tools-category-head h2 { margin: 0; color: var(--ink); font-size: 12px; text-transform: none; letter-spacing: 0; }
+  .tools-category-count { color: var(--ink-muted); font-size: 10.5px; }
+  .tools-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 10px; }
+  .tool-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px; transition: background .15s, border-color .15s; }
+  .tool-card:hover { background: var(--card-hover); border-color: #343b51; }
+  .tool-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; min-height: 30px; }
+  .tool-card-name { font-weight: 650; font-size: 12px; min-width: 0; line-height: 1.35; }
+  .tool-card button { width: 100%; margin-top: 9px; min-height: 32px; padding: 6px 10px; font-size: 11px; }
+  .tool-status { flex-shrink: 0; padding: 2px 7px; border-radius: 5px; font-size: 8.5px; letter-spacing: .04em; text-transform: uppercase; border: 1px solid var(--border); color: var(--ink-muted); }
+  .tool-status.installed { color: #86efac; border-color: rgba(34,197,94,.35); background: rgba(34,197,94,.09); }
+
+  .cleanup-hero { display: grid; grid-template-columns: minmax(230px, .7fr) minmax(0, 1.3fr); gap: 14px; margin-bottom: 14px; }
+  .cleanup-total { padding: 22px; background: linear-gradient(135deg, rgba(56,189,248,.13), var(--card) 55%); }
+  .cleanup-total-value { font: 700 34px/1 monospace; margin: 14px 0 8px; }
+  .cleanup-meter { height: 7px; border-radius: 999px; overflow: hidden; background: var(--border); }
+  .cleanup-meter > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #38bdf8, var(--accent)); }
+  .cleanup-list { display: grid; gap: 10px; }
+  .cleanup-card { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 12px; padding: 14px; background: var(--card); border: 1px solid var(--border); border-radius: 11px; }
+  .cleanup-card-icon { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+  .cleanup-card-icon svg { width: 19px; height: 19px; }
+  .cleanup-card h3 { margin: 0 0 3px; font-size: 12.5px; }
+  .cleanup-detail { color: var(--ink-muted); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cleanup-card-actions { min-width: 110px; text-align: right; }
+  .cleanup-card-actions button { width: 100%; margin-top: 6px; }
+
+  @media (max-width: 980px) {
+    .dockerexec-layout, .cron-dashboard-grid, .cleanup-hero { grid-template-columns: 1fr; }
+    .dockerexec-side { display: grid; grid-template-columns: 1fr 1fr; }
+    #dockerexec-container, .dockerexec-empty { height: 55vh; }
+  }
+  @media (max-width: 680px) {
+    #main { padding: 16px 14px 44px; }
+    .toolbar-card { align-items: stretch; }
+    .toolbar-card > * { width: 100% !important; }
+    .fm-scroll { max-height: calc(100vh - 290px); }
+    .fm-entry { align-items: flex-start; flex-direction: column; }
+    .fm-entry-actions { width: 100%; overflow-x: auto; padding-bottom: 2px; }
+    .dockerexec-side { grid-template-columns: 1fr; }
+    .cron-preset-grid { grid-template-columns: 1fr 1fr; }
+    .tools-card-grid { grid-template-columns: 1fr; }
+    .cleanup-card { grid-template-columns: auto minmax(0,1fr); }
+    .cleanup-card-actions { grid-column: 1 / -1; width: 100%; }
+  }
+
   /* ---------- Login gate ---------- */
   #login-screen {
     position: fixed; inset: 0; z-index: 500;
@@ -377,6 +488,7 @@
   <div class="nav-section-label">Security</div>
   <div class="nav-item" data-page="security" data-label="Security"><span class="nav-icon" style="color:#ef4444"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5l8-3z"/></svg></span><span class="nav-label">Security</span></div>
   <div class="nav-item" data-page="sshkeys" data-label="SSH Keys"><span class="nav-icon" style="color:#0ea5e9"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="4"/><path d="M10.8 10.8L21 21M17 17l3-3M13.5 20.5l3-3"/></svg></span><span class="nav-label">SSH Keys</span></div>
+  <div class="nav-item" data-page="apikeys" data-label="API Keys"><span class="nav-icon" style="color:#3b82f6"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="15" r="3"/><path d="M10.5 13.5L21 3m-4 0h4v4M16 8l2 2"/></svg></span><span class="nav-label">API Keys</span></div>
 
   <div class="nav-section-label">Settings</div>
   <div class="nav-item" data-page="webhooks" data-label="Notifikasi"><span class="nav-icon" style="color:#eab308"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span><span class="nav-label">Notifikasi</span></div>
@@ -521,7 +633,7 @@
       <h1>Node Manager</h1>
       <div style="display:flex;gap:8px;align-items:center">
         <label style="margin:0;font-size:12px;color:var(--ink-muted)">User:</label>
-        <input id="node-user" placeholder="catur" value="catur" onchange="refreshNode()" style="width:110px" />
+        <select id="node-user" onchange="refreshNode()" style="width:130px"><option value="">Memuat user...</option></select>
         <button onclick="openInstallNodeModal()">+ Install Node</button>
         <button class="secondary" onclick="refreshNode()">↻ Refresh</button>
       </div>
@@ -631,34 +743,90 @@
   </div>
 
   <div class="page" id="page-tools">
-    <div class="topbar"><h1>Tools / Installer</h1><button class="secondary" onclick="refreshTools()">↻ Refresh</button></div>
-    <p style="color:var(--ink-muted);font-size:12.5px;margin:-10px 0 12px">Deteksi tool yang biasanya dibutuhkan di VPS produksi, install langsung dari sini (via apt-get) tanpa buka terminal.</p>
-    <input id="tools-search" placeholder="Cari tool... (mis. redis, database, security)" style="max-width:400px;margin-bottom:16px" oninput="renderToolsGrid()" />
+    <div class="workspace-head">
+      <div class="topbar"><h1>Tools / Installer</h1><button class="secondary" onclick="refreshTools()">Refresh</button></div>
+      <p class="workspace-subtitle">Deteksi dan pasang kebutuhan VPS langsung melalui APT tanpa membuka terminal.</p>
+    </div>
+    <div class="panel-card" style="padding:12px 14px;margin-bottom:14px;border-color:rgba(124,108,240,.35)">
+      <b style="font-size:12px">Paket dibatasi daftar aman</b>
+      <span class="workspace-subtitle" style="display:block;margin-top:4px">Panel hanya menerima tool yang sudah terdaftar di sistem. Nama paket tidak bisa diketik atau dikirim bebas, sehingga request tidak dapat menyisipkan perintah atau memasang paket sembarangan.</span>
+    </div>
+    <div class="toolbar-card">
+      <input id="tools-search" class="toolbar-grow" aria-label="Cari tool" placeholder="Cari tool, kategori, atau package..." oninput="renderToolsGrid()" />
+      <div class="tools-summary" id="tools-summary"><span class="badge">Memuat status...</span></div>
+    </div>
     <div id="tools-grid"><div class="empty">Memuat...</div></div>
   </div>
 
   <div class="page" id="page-cron">
-    <div class="topbar">
-      <h1>Cron Jobs</h1>
-      <div style="display:flex;gap:8px;align-items:center">
-        <label style="margin:0;font-size:12px;color:var(--ink-muted)">User:</label>
-        <input id="cron-user" placeholder="catur" value="catur" onchange="refreshCron()" style="width:110px" />
-        <button onclick="openCronModal()">+ Tambah Cron</button>
-        <button class="secondary" onclick="refreshCron()">↻ Refresh</button>
+    <div class="workspace-head">
+      <div class="topbar">
+        <div>
+          <h1>Cron Jobs</h1>
+          <p class="workspace-subtitle">Jadwalkan dan pantau tugas berulang pada server.</p>
+        </div>
+        <button onclick="openCronModal()">+ Buat Job</button>
       </div>
     </div>
-    <p style="color:var(--ink-muted);font-size:12.5px;margin:-10px 0 16px">Kelola scheduled task (crontab) per user OS. Format jadwal standar cron: menit jam tanggal bulan hari (mis. "0 2 * * *" = tiap jam 2 pagi).</p>
-    <div id="cron-list"><div class="empty">Memuat...</div></div>
+    <div class="toolbar-card">
+      <label for="cron-user" class="mini-label">User OS</label>
+      <select id="cron-user" aria-label="User cron" onchange="refreshCron()" style="width:150px"><option value="">Memuat user...</option></select>
+      <button class="secondary compact-button" onclick="refreshCron()">Refresh</button>
+      <span class="workspace-subtitle toolbar-grow">Format: menit · jam · tanggal · bulan · hari</span>
+    </div>
+    <div class="stats-row" id="cron-stats-row"><div class="empty">Memuat ringkasan...</div></div>
+    <div class="cron-dashboard-grid">
+      <div class="panel-card">
+        <div class="panel-head"><h2>Daftar Cron Job</h2><span class="badge" id="cron-table-count">0 job</span></div>
+        <div id="cron-list"><div class="empty">Memuat...</div></div>
+      </div>
+      <div class="cron-side-stack">
+        <div class="panel-card">
+          <div class="panel-head"><h3>Jadwal Aktif</h3></div>
+          <div id="cron-schedule-list" class="cron-mini-list"><div class="empty">Memuat...</div></div>
+        </div>
+        <div class="panel-card">
+          <div class="panel-head"><h3>Eksekusi Terakhir</h3></div>
+          <div id="cron-recent-runs" class="cron-mini-list"><div class="empty">Memuat...</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="cron-dashboard-grid">
+      <div class="panel-card cron-helper">
+        <span class="mini-label">Cron Expression Helper</span>
+        <div class="cron-helper-code"><span style="color:var(--ink-muted)">menit&nbsp; jam&nbsp; tanggal&nbsp; bulan&nbsp; hari</span><br/>0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 2&nbsp;&nbsp;&nbsp;&nbsp; *&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; *&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; *</div>
+        <div class="cron-preset-grid">
+          <div class="cron-preset" onclick="openCronModal(null,'* * * * *','')"><b>Setiap menit</b><code>* * * * *</code></div>
+          <div class="cron-preset" onclick="openCronModal(null,'0 * * * *','')"><b>Setiap jam</b><code>0 * * * *</code></div>
+          <div class="cron-preset" onclick="openCronModal(null,'0 2 * * *','')"><b>Harian 02:00</b><code>0 2 * * *</code></div>
+          <div class="cron-preset" onclick="openCronModal(null,'0 3 * * 0','')"><b>Mingguan</b><code>0 3 * * 0</code></div>
+          <div class="cron-preset" onclick="openCronModal(null,'0 0 1 * *','')"><b>Bulanan</b><code>0 0 1 * *</code></div>
+          <div class="cron-preset" onclick="openCronModal(null,'*/15 * * * *','')"><b>Tiap 15 menit</b><code>*/15 * * * *</code></div>
+        </div>
+      </div>
+      <div class="panel-card tips-card">
+        <b style="font-size:12.5px;color:var(--yellow)">Tips &amp; praktik aman</b>
+        <ul>
+          <li>Gunakan path absolut di command.</li>
+          <li>Arahkan output ke file log bila diperlukan.</li>
+          <li>Uji command manual sebelum dijadwalkan.</li>
+          <li>Hindari jadwal berat yang berjalan bersamaan.</li>
+        </ul>
+      </div>
+    </div>
   </div>
 
   <div class="page" id="page-diskcleanup">
-    <div class="topbar">
-      <h1>Disk Cleanup</h1>
-      <button class="secondary" onclick="refreshDiskCleanup()">↻ Scan Ulang</button>
+    <div class="workspace-head">
+      <div class="topbar"><h1>Disk Cleanup</h1><button class="secondary" onclick="refreshDiskCleanup()">Scan Ulang</button></div>
+      <p class="workspace-subtitle">Temukan cache regenerable dan bebaskan ruang tanpa menyentuh data aplikasi utama.</p>
     </div>
-    <p style="color:var(--ink-muted);font-size:12.5px;margin:-10px 0 16px">Cache sistem yang aman dibersihkan (regenerable otomatis) - npm cache semua user, APT package cache, Docker image/build cache yang tidak dipakai, dan systemd journal log.</p>
-    <div class="stats-row" id="diskcleanup-stats-row" style="margin-bottom:16px"><div class="empty">Memuat...</div></div>
-    <div id="diskcleanup-list" class="grid"></div>
+    <div id="diskcleanup-stats-row" class="cleanup-hero"><div class="empty">Memindai ruang yang dapat dibersihkan...</div></div>
+    <div class="panel-card" style="padding:14px;margin-bottom:14px;border-color:rgba(56,189,248,.3)">
+      <b style="font-size:12px">Yang dibersihkan hanya cache regenerable</b>
+      <span class="workspace-subtitle" style="display:block;margin-top:4px">npm, APT, Docker cache yang tidak dipakai, dan journal systemd. Setiap aksi tetap meminta konfirmasi.</span>
+    </div>
+    <div id="diskcleanup-list" class="cleanup-list"></div>
   </div>
 
   <div class="page" id="page-bandwidth">
@@ -708,17 +876,37 @@
   </div>
 
   <div class="page" id="page-filemanager">
-    <div class="topbar"><h1>File Manager</h1><button class="secondary" onclick="fmRefresh()">↻ Refresh</button></div>
-    <p style="font-size:11.5px;color:var(--red);margin:-10px 0 12px">⚠ Akses ke SELURUH filesystem server - hati-hati, aksi hapus/edit di sini permanen dan gak ada sandbox.</p>
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
-      <div id="fm-breadcrumb" style="flex:1;min-width:200px;font-size:12.5px;color:var(--ink-muted);font-family:monospace"></div>
-      <button class="secondary" onclick="fmNewFolderModal()">+ Folder</button>
-      <button class="secondary" onclick="fmNewFileModal()">+ File</button>
-      <label class="secondary" style="display:inline-flex;align-items:center;padding:8px 14px;border-radius:8px;cursor:pointer;margin:0;font-size:13px">
-        ⬆ Upload<input type="file" id="fm-upload-input" style="display:none" onchange="fmUpload(this)" />
+    <div class="workspace-head">
+      <div class="topbar"><h1>File Manager</h1><button class="secondary" onclick="fmRefresh()">Refresh</button></div>
+      <p class="workspace-subtitle" style="color:var(--red)">Akses seluruh filesystem server. Hapus dan edit bersifat permanen.</p>
+    </div>
+    <div class="toolbar-card">
+      <div id="fm-breadcrumb" class="toolbar-grow" style="font-size:12.5px;color:var(--ink-muted);font-family:monospace;overflow:auto;white-space:nowrap"></div>
+      <button class="secondary compact-button" onclick="fmNewFolderModal()">+ Folder</button>
+      <button class="secondary compact-button" onclick="fmNewFileModal()">+ File</button>
+      <label class="secondary compact-button" style="display:inline-flex;align-items:center;justify-content:center;border-radius:8px;cursor:pointer;margin:0">
+        Upload<input type="file" id="fm-upload-input" style="display:none" onchange="fmUpload(this)" />
       </label>
     </div>
-    <div id="fm-list"><div class="empty">Memuat...</div></div>
+    <div class="panel-card fm-shell">
+      <div class="panel-head"><h2>Isi Folder</h2><span class="mini-label">scroll untuk melihat semua file</span></div>
+      <div id="fm-list" class="fm-scroll"><div class="empty">Memuat...</div></div>
+    </div>
+  </div>
+
+  <div class="page" id="page-apikeys">
+    <div class="workspace-head">
+      <div class="topbar"><h1>API Keys</h1><button onclick="openCreateApiKeyModal()">+ Create API Key</button></div>
+      <p class="workspace-subtitle">Kelola key untuk bot, aplikasi mobile, atau integrasi eksternal. Setiap key punya nama sendiri dan bisa dicabut tanpa mengganggu key lain.</p>
+    </div>
+    <div class="settings-card" style="border-color:#3b82f644">
+      <div class="settings-card-head"><span class="sec-icon" style="color:#3b82f6"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></span><h2>Penyimpanan aman</h2></div>
+      <p class="settings-desc" style="margin-bottom:0">Autentikasi memakai hash. Salinan untuk Reveal dienkripsi AES-256-GCM di server dan setiap Reveal wajib dikonfirmasi dengan password admin.</p>
+    </div>
+    <div class="panel-card">
+      <div class="panel-head"><h2>Daftar API Key</h2><span id="api-keys-count" class="mini-label">Memuat...</span></div>
+      <div id="api-keys-list"><div class="empty" style="margin:18px">Memuat API key...</div></div>
+    </div>
   </div>
 
   <div class="page" id="page-appsettings">
@@ -821,34 +1009,56 @@
   </div>
 
   <div class="page" id="page-dockerexec">
-    <div class="topbar">
-      <h1>Docker Exec / Shell</h1>
-      <div style="display:flex;gap:8px;align-items:center">
-        <select id="dockerexec-container-select" onchange="connectDockerExec()" style="width:auto"><option value="">Pilih container...</option></select>
-        <select id="dockerexec-shell-select" onchange="connectDockerExec()" style="width:auto">
-          <option value="sh">sh</option>
-          <option value="bash">bash</option>
-        </select>
-        <button class="secondary" onclick="refreshDockerExecContainers()">↻ Refresh List</button>
-        <button class="secondary" onclick="connectDockerExec()">↻ Reconnect</button>
-      </div>
+    <div class="workspace-head">
+      <div class="topbar"><h1>Docker Exec</h1><button class="secondary" onclick="refreshDockerExecContainers()">Refresh Containers</button></div>
+      <p class="workspace-subtitle">Buka shell interaktif langsung di dalam container yang sedang berjalan.</p>
     </div>
-    <p style="color:var(--ink-muted);font-size:12.5px;margin:-10px 0 12px">Terminal langsung ke dalam container Docker. Hati-hati mengubah apapun di dalam container - perubahan filesystem container biasanya hilang kalau container di-restart/recreate.</p>
-    <div id="dockerexec-infobar" class="card" style="margin-bottom:12px;display:none"></div>
-    <div style="display:grid;grid-template-columns:1fr 260px;gap:12px">
-      <div id="dockerexec-container" style="background:#0a0d12;border:1px solid var(--border);border-radius:12px;padding:10px;height:65vh"></div>
-      <div style="display:flex;flex-direction:column;gap:12px">
-        <div class="card" style="margin-bottom:0">
-          <h3 style="margin:0 0 10px;font-size:13px">Quick Commands</h3>
-          <div style="display:flex;flex-direction:column;gap:6px">
-            ${['ls -la', 'pwd', 'env', 'whoami', 'ps aux'].map((cmd) => `<button class="secondary" style="text-align:left;font-family:monospace;font-size:11.5px" onclick="dockerExecSendCommand('${cmd}')">${cmd}</button>`).join('')}
+    <div class="toolbar-card">
+      <label for="dockerexec-container-select" class="mini-label">Container</label>
+      <select id="dockerexec-container-select" class="toolbar-grow" onchange="connectDockerExec()"><option value="">Pilih container...</option></select>
+      <label for="dockerexec-shell-select" class="mini-label">Shell</label>
+      <select id="dockerexec-shell-select" onchange="connectDockerExec()" style="width:110px">
+        <option value="sh">sh</option>
+        <option value="bash">bash</option>
+      </select>
+      <button onclick="connectDockerExec()">Connect</button>
+    </div>
+    <div id="dockerexec-infobar" class="panel-card" style="margin-bottom:12px;display:none"></div>
+    <div class="dockerexec-layout">
+      <div class="terminal-panel">
+        <div class="terminal-panel-head">
+          <div style="display:flex;align-items:center;gap:10px"><span class="terminal-lights"><i></i><i></i><i></i></span><b id="dockerexec-terminal-title" style="font-size:11.5px;font-family:monospace">container shell</b></div>
+          <span class="badge" id="dockerexec-status">Belum tersambung</span>
+        </div>
+        <div id="dockerexec-container">
+          <div class="dockerexec-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l4 3-4 3M13 15h4"/></svg>
+            <b>Pilih container untuk memulai</b>
+            <span>Shell akan dibuka di panel ini.</span>
           </div>
         </div>
-        <div id="dockerexec-envcard" class="card" style="margin-bottom:0;display:none">
-          <h3 style="margin:0 0 10px;font-size:13px">Environment Variables</h3>
-          <div id="dockerexec-env-list" style="font-size:11px;max-height:200px;overflow-y:auto"></div>
-        </div>
       </div>
+      <aside class="dockerexec-side">
+        <div class="panel-card" style="padding:14px">
+          <span class="mini-label">Quick Commands</span>
+          <div class="quick-command-grid" style="margin-top:10px">
+            <button class="secondary" onclick="dockerExecSendCommand('ls -la')">ls -la</button>
+            <button class="secondary" onclick="dockerExecSendCommand('pwd')">pwd</button>
+            <button class="secondary" onclick="dockerExecSendCommand('whoami')">whoami</button>
+            <button class="secondary" onclick="dockerExecSendCommand('ps aux')">ps aux</button>
+            <button class="secondary" onclick="dockerExecSendCommand('df -h')">df -h</button>
+            <button class="secondary" onclick="dockerExecSendCommand('env')">env</button>
+          </div>
+        </div>
+        <div id="dockerexec-envcard" class="panel-card" style="display:none">
+          <div class="panel-head"><h3>Environment</h3><span class="mini-label">read only</span></div>
+          <div id="dockerexec-env-list" style="font-size:11px;max-height:310px;overflow:auto;padding:10px 14px"></div>
+        </div>
+        <div class="panel-card tips-card">
+          <b style="font-size:12px;color:var(--yellow)">Perubahan container</b>
+          <p class="workspace-subtitle" style="margin-top:6px">Perubahan filesystem bisa hilang ketika container di-recreate. Simpan konfigurasi penting di volume.</p>
+        </div>
+      </aside>
     </div>
   </div>
 
@@ -1092,6 +1302,7 @@ const REFRESHERS = {
   diskcleanup: refreshDiskCleanup,
   bandwidth: refreshBandwidth,
   sshkeys: refreshSshKeys,
+  apikeys: refreshApiKeys,
   filemanager: () => fmRefresh(),
   ai: () => aiInit(),
   terminal: () => { if (!termSocket || termSocket.readyState !== WebSocket.OPEN) connectTerminal(); },
@@ -1302,8 +1513,9 @@ async function openPm2UsersModal() {
       <div class="modal">
         <h3>User Dipantau (PM2)</h3>
         <p style="font-size:12px;color:var(--ink-muted);margin:-6px 0 14px">Panel ini otomatis pantau PM2 milik deploy_user dan user manapun yang punya project di registry. Kalau ada app yang di-start MANUAL sebagai user OS lain (PM2 daemon-nya terpisah per-user di Linux), tambahkan usernya di sini biar ikut kelihatan.</p>
-        <label>Username OS tambahan (satu per baris)</label>
-        <textarea id="pm2-users-input" rows="4" placeholder="ubuntu">Memuat...</textarea>
+        <label for="pm2-users-input">User OS tambahan</label>
+        <select id="pm2-users-input" multiple size="5"><option value="">Memuat user...</option></select>
+        <p style="font-size:11px;color:var(--ink-muted);margin:6px 0 0">Bisa pilih lebih dari satu user.</p>
         <div class="modal-actions">
           <button class="secondary" onclick="document.getElementById('modal-root').innerHTML=''">Batal</button>
           <button onclick="savePm2Users()">Simpan</button>
@@ -1312,12 +1524,14 @@ async function openPm2UsersModal() {
     </div>
   `;
   try {
-    const cfg = await api('/config');
-    document.getElementById('pm2-users-input').value = (cfg.additional_pm2_users || []).join('\n');
-  } catch (e) { document.getElementById('pm2-users-input').value = ''; }
+    const [cfg, userData] = await Promise.all([api('/config'), api('/filemanager/users')]);
+    const selected = new Set(cfg.additional_pm2_users || []);
+    document.getElementById('pm2-users-input').innerHTML = (userData.users || []).map((user) =>
+      `<option value="${user}" ${selected.has(user) ? 'selected' : ''}>${user}</option>`).join('');
+  } catch (e) { document.getElementById('pm2-users-input').innerHTML = '<option value="">Gagal memuat user</option>'; }
 }
 async function savePm2Users() {
-  const users = document.getElementById('pm2-users-input').value.split('\n').map((s) => s.trim()).filter(Boolean);
+  const users = Array.from(document.getElementById('pm2-users-input').selectedOptions).map((option) => option.value).filter(Boolean);
   try {
     await api('/config', { method: 'PUT', body: JSON.stringify({ confirm: true, additional_pm2_users: users }) });
     toast('User dipantau disimpan.', 'success');
@@ -1715,7 +1929,7 @@ function openDeployAppModal() {
           <div><label>Branch</label><input id="dep-branch" placeholder="master (default)" /></div>
           <div><label>Port</label><input id="dep-port" type="number" placeholder="3000" onblur="checkPortField('dep-port','dep-port-status')" /><span id="dep-port-status" style="font-size:11px"></span></div>
           <div><label>Folder Path</label><input id="dep-folder" placeholder="/opt/apps/my-new-app" /></div>
-          <div><label>Deploy User</label><input id="dep-user" placeholder="catur (default)" /></div>
+          <div><label>Deploy User</label><select id="dep-user"><option value="">Memuat user...</option></select></div>
           <div>
             <label>Prisma Mode</label>
             <select id="dep-prisma">
@@ -1750,6 +1964,7 @@ function openDeployAppModal() {
     </div>
   `;
   refreshGithubAccountDropdowns();
+  populateOsUserSelect('dep-user', 'catur');
 }
 function switchDeployTab(tab) {
   document.getElementById('dep-panel-native').style.display = tab === 'native' ? 'grid' : 'none';
@@ -1998,7 +2213,23 @@ function deleteProject(name) {
 }
 
 // ---------- Node Manager ----------
+const osUserSelectsLoaded = new Set();
+async function populateOsUserSelect(id, preferred = 'catur') {
+  const select = document.getElementById(id);
+  if (!select || osUserSelectsLoaded.has(id)) return;
+  try {
+    const data = await api('/filemanager/users');
+    const users = data.users || [];
+    select.innerHTML = users.map((user) => `<option value="${user}">${user}</option>`).join('');
+    select.value = users.includes(preferred) ? preferred : (users[0] || '');
+    osUserSelectsLoaded.add(id);
+  } catch (e) {
+    select.innerHTML = '<option value="catur">catur</option>';
+    toast('Gagal memuat daftar user OS: ' + e.message, 'error');
+  }
+}
 async function refreshNode() {
+  await populateOsUserSelect('node-user', 'catur');
   const user = document.getElementById('node-user').value.trim() || 'catur';
   const grid = document.getElementById('node-grid');
   try {
@@ -2439,40 +2670,77 @@ async function checkPortForNginxTarget(inputId, statusId) {
 // ---------- Tools / Installer ----------
 let toolsCache = [];
 // ---------- Cron Jobs ----------
+let cronUsersLoaded = false;
+async function ensureCronUsers() {
+  if (cronUsersLoaded) return;
+  const select = document.getElementById('cron-user');
+  try {
+    const data = await api('/filemanager/users');
+    const users = data.users || [];
+    select.innerHTML = users.map((user) => `<option value="${user}">${user}</option>`).join('');
+    select.value = users.includes('catur') ? 'catur' : (users[0] || '');
+    cronUsersLoaded = true;
+  } catch (e) {
+    select.innerHTML = '<option value="catur">catur</option>';
+    toast('Gagal memuat daftar user OS: ' + e.message, 'error');
+  }
+}
+function cronDisplayName(command, index, name) {
+  if ((name || '').trim()) return name.trim();
+  const first = (command || '').trim().split(/\s+/)[0] || '';
+  const clean = first.split('/').pop().replace(/\.(sh|js|py)$/i, '').replace(/[-_]+/g, ' ').trim();
+  return clean ? clean.replace(/\b\w/g, (c) => c.toUpperCase()) : `Cron Job ${index + 1}`;
+}
 async function refreshCron() {
+  await ensureCronUsers();
   const user = document.getElementById('cron-user').value.trim() || 'catur';
   const list = document.getElementById('cron-list');
+  const stats = document.getElementById('cron-stats-row');
+  const schedules = document.getElementById('cron-schedule-list');
+  const recent = document.getElementById('cron-recent-runs');
   try {
     const data = await api(`/cron?user=${encodeURIComponent(user)}`);
-    if (!data.entries.length) { list.innerHTML = `<div class="empty">Belum ada cron job untuk user "${user}".</div>`; return; }
-    list.innerHTML = `
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;overflow-x:auto">
-        <table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:600px">
-          <thead>
-            <tr style="border-bottom:1px solid var(--border);text-align:left;color:var(--ink-muted);font-size:11px;text-transform:uppercase">
-              <th style="padding:10px 14px">Jadwal</th><th>Command</th><th>Status</th><th>Last Run</th><th style="padding-right:14px">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${data.entries.map((e) => `
-              <tr style="border-bottom:1px solid var(--border)">
-                <td style="padding:10px 14px;font-family:monospace">${e.schedule}</td>
-                <td style="font-family:monospace;font-size:11.5px;color:var(--ink-muted);max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${e.command.replace(/"/g, '&quot;')}">${e.command}</td>
-                <td><span class="badge ${e.enabled ? 'ok' : ''}">${e.enabled ? 'Aktif' : 'Nonaktif'}</span></td>
-                <td style="white-space:nowrap">${formatLastRun(e)}</td>
-                <td style="white-space:nowrap;padding-right:14px">
-                  <button class="secondary" style="padding:4px 8px;font-size:11px" onclick='openCronModal(${e.index}, ${JSON.stringify(e.schedule)}, ${JSON.stringify(e.command)})'>Edit</button>
-                  <button class="secondary" style="padding:4px 8px;font-size:11px" onclick="toggleCron(${e.index})">${e.enabled ? 'Nonaktifkan' : 'Aktifkan'}</button>
-                  <button class="danger" style="padding:4px 8px;font-size:11px" onclick="deleteCron(${e.index})">Hapus</button>
-                  ${e.jobId ? `<button class="secondary" style="padding:4px 8px;font-size:11px" onclick="viewCronHistory(${e.index})">History</button>` : ''}
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    `;
-  } catch (e) { list.innerHTML = `<div class="empty">Gagal: ${e.message}</div>`; }
+    const entries = data.entries || [];
+    const active = entries.filter((e) => e.enabled);
+    const failed = entries.filter((e) => e.lastRun && e.lastRun.exitCode !== 0);
+    const tracked = entries.filter((e) => e.lastRun);
+    const latest = [...tracked].sort((a, b) => new Date(b.lastRun.startedAt) - new Date(a.lastRun.startedAt))[0];
+    const statChip = (color, iconPath) => `<div class="stat-icon-chip" style="background:${color}22;color:${color}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${iconPath}</svg></div>`;
+    stats.innerHTML = `
+      <div class="stat-card"><div class="stat-card-head">${statChip('#3b82f6','<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/>')}<div class="stat-label">Total Jobs</div></div><div class="stat-value">${entries.length}</div></div>
+      <div class="stat-card"><div class="stat-card-head">${statChip('#22c55e','<circle cx="12" cy="12" r="9"/><path d="M10 8l6 4-6 4z"/>')}<div class="stat-label">Active Jobs</div></div><div class="stat-value">${active.length}</div></div>
+      <div class="stat-card"><div class="stat-card-head">${statChip('#ef4444','<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>')}<div class="stat-label">Failed Tracked</div></div><div class="stat-value">${failed.length}</div></div>
+      <div class="stat-card"><div class="stat-card-head">${statChip('#a855f7','<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>')}<div class="stat-label">Last Execution</div></div><div class="stat-value" style="font-size:13px">${latest ? fmtWIB(latest.lastRun.startedAt) : 'Belum ada'}</div></div>`;
+    document.getElementById('cron-table-count').textContent = `${entries.length} job`;
+    if (!entries.length) {
+      list.innerHTML = `<div class="empty" style="margin:14px">Belum ada cron job untuk user "${user}".</div>`;
+      schedules.innerHTML = '<div class="empty">Belum ada jadwal aktif.</div>';
+      recent.innerHTML = '<div class="empty">Belum ada eksekusi tercatat.</div>';
+      return;
+    }
+    list.innerHTML = `<div class="data-table-wrap"><table class="data-table">
+      <thead><tr><th>Job</th><th>Schedule</th><th>Command</th><th>Status</th><th>Last Run</th><th>Actions</th></tr></thead>
+      <tbody>${entries.map((e) => `<tr>
+        <td><b>${cronDisplayName(e.command, e.index, e.name)}</b><div class="mini-label">#${e.index + 1} · ${user}</div></td>
+        <td><code style="color:#c4b5fd">${e.schedule}</code></td>
+        <td style="max-width:300px"><div style="font-family:monospace;color:var(--ink-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${e.command.replace(/"/g, '&quot;')}">${e.command}</div></td>
+        <td><span class="badge ${e.enabled ? 'ok' : ''}">${e.enabled ? 'Aktif' : 'Nonaktif'}</span></td>
+        <td style="white-space:nowrap">${formatLastRun(e)}</td>
+        <td><div class="table-actions">
+          <button class="secondary compact-button" onclick='openCronModal(${e.index}, ${JSON.stringify(e.schedule)}, ${JSON.stringify(e.command)}, ${JSON.stringify(e.name || '')})'>Edit</button>
+          <button class="secondary compact-button" onclick="toggleCron(${e.index})">${e.enabled ? 'Pause' : 'Aktifkan'}</button>
+          ${e.jobId ? `<button class="secondary compact-button" onclick="viewCronHistory(${e.index})">History</button>` : ''}
+          <button class="danger compact-button" onclick="deleteCron(${e.index})">Hapus</button>
+        </div></td>
+      </tr>`).join('')}</tbody></table></div>`;
+    schedules.innerHTML = active.length ? active.slice(0, 6).map((e) => `<div class="cron-mini-row"><span class="dot green"></span><div class="cron-mini-main"><b>${cronDisplayName(e.command, e.index, e.name)}</b><div class="mini-label"><code>${e.schedule}</code></div></div></div>`).join('') : '<div class="empty">Semua job sedang nonaktif.</div>';
+    const recentEntries = [...tracked].sort((a, b) => new Date(b.lastRun.startedAt) - new Date(a.lastRun.startedAt)).slice(0, 6);
+    recent.innerHTML = recentEntries.length ? recentEntries.map((e) => `<div class="cron-mini-row"><span class="dot ${e.lastRun.exitCode === 0 ? 'green' : 'red'}"></span><div class="cron-mini-main"><b>${cronDisplayName(e.command, e.index, e.name)}</b><div class="mini-label">${fmtWIB(e.lastRun.startedAt)} · ${e.lastRun.durationSec}s</div></div><span class="badge ${e.lastRun.exitCode === 0 ? 'ok' : 'bad'}">${e.lastRun.exitCode === 0 ? 'OK' : 'Gagal'}</span></div>`).join('') : '<div class="empty">Belum ada eksekusi tercatat.</div>';
+  } catch (e) {
+    stats.innerHTML = '';
+    list.innerHTML = `<div class="empty" style="margin:14px">Gagal: ${e.message}</div>`;
+    schedules.innerHTML = recent.innerHTML = '<div class="empty">Data tidak tersedia.</div>';
+  }
 }
 function formatLastRun(entry) {
   if (!entry.jobId) return `<span style="color:var(--ink-muted);font-size:11px">- (job lama, belum ada tracking)</span>`;
@@ -2538,14 +2806,16 @@ function guessCronPreset(schedule) {
 }
 
 let cronModalOriginalSchedule = '';
-function openCronModal(index, schedule, command) {
-  const isEdit = index !== undefined;
+function openCronModal(index, schedule, command, name = '') {
+  const isEdit = Number.isInteger(index);
   cronModalOriginalSchedule = schedule || '';
   const guess = guessCronPreset(schedule);
   document.getElementById('modal-root').innerHTML = `
     <div class="modal-backdrop" onclick="if(event.target===this)this.remove()">
       <div class="modal">
         <h3>${isEdit ? 'Edit Cron Job' : 'Tambah Cron Job'}</h3>
+        <label for="cron-name-input">Nama Cron</label>
+        <input id="cron-name-input" maxlength="80" value="${String(name).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')}" placeholder="mis. Backup database harian" />
         <label>Jadwal</label>
         <select id="cron-preset-select" onchange="updateCronPresetFields()">
           <option value="minute1">Setiap menit</option>
@@ -2629,12 +2899,13 @@ async function saveCron(index) {
   const user = document.getElementById('cron-user').value.trim() || 'catur';
   const schedule = buildCronFromPreset().trim();
   const command = document.getElementById('cron-command-input').value.trim();
+  const name = document.getElementById('cron-name-input').value.trim();
   if (!schedule || !command) { toast('Jadwal dan command wajib diisi.', 'error'); return; }
   try {
     if (index === null) {
-      await api('/cron', { method: 'POST', body: JSON.stringify({ user, schedule, command }) });
+      await api('/cron', { method: 'POST', body: JSON.stringify({ user, schedule, command, name }) });
     } else {
-      await api(`/cron/${index}?user=${encodeURIComponent(user)}`, { method: 'PUT', body: JSON.stringify({ schedule, command }) });
+      await api(`/cron/${index}?user=${encodeURIComponent(user)}`, { method: 'PUT', body: JSON.stringify({ schedule, command, name }) });
     }
     toast('Cron job disimpan.', 'success');
     document.getElementById('modal-root').innerHTML = '';
@@ -2672,30 +2943,27 @@ let diskCleanupCache = null;
 async function refreshDiskCleanup() {
   const statsRow = document.getElementById('diskcleanup-stats-row');
   const list = document.getElementById('diskcleanup-list');
-  statsRow.innerHTML = `<div class="empty">Memindai...</div>`;
+  statsRow.innerHTML = `<div class="empty">Memindai ruang yang dapat dibersihkan...</div>`;
   list.innerHTML = '';
   try {
     const data = await api('/cleanup/scan/system');
     diskCleanupCache = data;
-    const chip = (color, path) => `<div class="stat-icon-chip" style="background:${color}22;color:${color}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${path}</svg></div>`;
+    const maxBytes = Math.max(...data.categories.map((c) => c.bytes), 1);
+    const nonEmpty = data.categories.filter((c) => c.bytes > 0).length;
     statsRow.innerHTML = `
-      <div class="stat-card"><div class="stat-card-head">${chip('#38bdf8', '<path d="M12 2v20M2 12h20"/>')}<div class="stat-label">Total Reclaimable</div></div><div class="stat-value">${fmtBytesGeneric(data.totalBytes)}</div></div>
-      ${data.categories.map((c) => `<div class="stat-card"><div class="stat-card-head">${chip(DISK_CLEANUP_ICONS[c.key].color, DISK_CLEANUP_ICONS[c.key].path)}<div class="stat-label">${c.label}</div></div><div class="stat-value">${c.bytesLabel}</div></div>`).join('')}
-    `;
-    list.innerHTML = data.categories.map((c) => `
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <h3 style="margin:0">${c.label}</h3>
-          <span class="badge ${c.bytes > 0 ? 'warn' : 'ok'}">${c.bytesLabel}</span>
-        </div>
-        ${c.detail && c.detail.length ? `
-          <table style="width:100%;font-size:12px;color:var(--ink-muted);margin-bottom:10px">
-            ${c.detail.map((d) => `<tr><td style="padding:2px 0">${d.user || d.type}</td><td style="text-align:right">${d.bytes ? fmtBytesGeneric(d.bytes) : '-'}</td></tr>`).join('')}
-          </table>
-        ` : ''}
-        <button ${c.bytes === 0 ? 'disabled' : ''} onclick="cleanDiskCategory('${c.key}', '${c.label.replace(/'/g, "\\'")}')" style="width:100%">Bersihkan</button>
-      </div>
-    `).join('');
+      <div class="panel-card cleanup-total"><span class="mini-label">Total Reclaimable</span><div class="cleanup-total-value">${fmtBytesGeneric(data.totalBytes)}</div><div class="workspace-subtitle">${nonEmpty} dari ${data.categories.length} kategori memiliki cache.</div><div class="cleanup-meter" style="margin-top:17px"><span style="width:${data.totalBytes > 0 ? 100 : 0}%"></span></div></div>
+      <div class="panel-card" style="padding:18px"><span class="mini-label">Ringkasan kategori</span><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px">
+        ${data.categories.map((c) => `<div><div style="display:flex;justify-content:space-between;gap:8px;font-size:11.5px"><span>${c.label}</span><b>${c.bytesLabel}</b></div><div class="cleanup-meter" style="margin-top:7px"><span style="width:${Math.max(0, Math.round(c.bytes / maxBytes * 100))}%"></span></div></div>`).join('')}
+      </div></div>`;
+    list.innerHTML = data.categories.map((c) => {
+      const icon = DISK_CLEANUP_ICONS[c.key];
+      const details = (c.detail || []).map((d) => `${d.user || d.type}: ${d.bytes ? fmtBytesGeneric(d.bytes) : '-'}`).join(' · ');
+      return `<div class="cleanup-card">
+        <div class="cleanup-card-icon" style="background:${icon.color}18;color:${icon.color}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${icon.path}</svg></div>
+        <div style="min-width:0"><h3>${c.label}</h3><div class="cleanup-detail" title="${details.replace(/"/g, '&quot;')}">${details || 'Tidak ada detail tambahan'}</div><div class="cleanup-meter" style="margin-top:9px"><span style="width:${Math.max(0, Math.round(c.bytes / maxBytes * 100))}%"></span></div></div>
+        <div class="cleanup-card-actions"><span class="badge ${c.bytes > 0 ? 'warn' : 'ok'}">${c.bytesLabel}</span><button class="secondary compact-button" ${c.bytes === 0 ? 'disabled' : ''} onclick="cleanDiskCategory('${c.key}', '${c.label.replace(/'/g, "\\'")}')">Bersihkan</button></div>
+      </div>`;
+    }).join('');
   } catch (e) {
     statsRow.innerHTML = '';
     list.innerHTML = `<div class="empty">Gagal: ${e.message}</div>`;
@@ -2765,6 +3033,112 @@ async function refreshAppSettings() {
     document.getElementById('cf-token-status').textContent = cfg.hasCloudflareApiToken ? '✓ Token sudah diset.' : 'Belum diset.';
   } catch (e) { toast('Gagal ambil config: ' + e.message, 'error'); }
   refreshGithubAccounts();
+}
+function apiKeyEsc(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+}
+let apiKeysCache = [];
+async function refreshApiKeys() {
+  const list = document.getElementById('api-keys-list');
+  const count = document.getElementById('api-keys-count');
+  try {
+    const data = await api('/auth/api-keys');
+    const keys = data.keys || [];
+    apiKeysCache = keys;
+    count.textContent = `${keys.length} key`;
+    if (!keys.length) {
+      list.innerHTML = '<div class="empty" style="margin:22px">Belum ada API key. Klik “Create API Key” untuk membuatnya.</div>';
+      return;
+    }
+    list.innerHTML = `<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Nama</th><th>Prefix</th><th>Dibuat</th><th>Status</th><th>Actions</th></tr></thead><tbody>${keys.map((key) => `
+      <tr>
+        <td><b>${apiKeyEsc(key.name)}</b></td>
+        <td><code>${key.prefix ? apiKeyEsc(key.prefix) + '••••••••' : 'key lama'}</code></td>
+        <td>${key.createdAt ? fmtWIB(key.createdAt) : '-'}</td>
+        <td><span class="badge ok">Aktif</span></td>
+        <td><div class="table-actions">
+          <button class="secondary compact-button" ${key.revealable ? `onclick="openRevealApiKeyModal('${key.id}')"` : 'disabled title="Key lama tidak punya plaintext tersimpan"'}>Reveal</button>
+          <button class="danger compact-button" onclick="openRevokeApiKeyModal('${key.id}')">Revoke</button>
+        </div></td>
+      </tr>`).join('')}</tbody></table></div>`;
+  } catch (e) {
+    count.textContent = 'Gagal';
+    list.innerHTML = `<div class="empty" style="margin:18px">Gagal memuat: ${apiKeyEsc(e.message)}</div>`;
+  }
+}
+function openCreateApiKeyModal() {
+  document.getElementById('modal-root').innerHTML = `<div class="modal-backdrop" onclick="if(event.target===this)this.remove()"><div class="modal">
+    <h3>Create API Key</h3>
+    <label for="api-key-name">Nama API key</label><input id="api-key-name" maxlength="60" placeholder="mis. Bot Telegram" autocomplete="off" />
+    <label for="api-key-password">Password admin</label><input id="api-key-password" type="password" autocomplete="current-password" />
+    <p style="font-size:11.5px;color:var(--ink-muted)">Gunakan nama yang menjelaskan aplikasi pemakainya agar mudah dicabut nanti.</p>
+    <div class="modal-actions"><button class="secondary" onclick="document.getElementById('modal-root').innerHTML=''">Batal</button><button id="api-key-submit" onclick="createNamedApiKey()">Create Key</button></div>
+  </div></div>`;
+  document.getElementById('api-key-name').focus();
+}
+async function createNamedApiKey() {
+  const name = document.getElementById('api-key-name').value.trim();
+  const password = document.getElementById('api-key-password').value;
+  if (!name || !password) { toast('Nama key dan password admin wajib diisi.', 'error'); return; }
+  const button = document.getElementById('api-key-submit'); button.disabled = true; button.textContent = 'Membuat...';
+  try {
+    const data = await api('/auth/api-keys', { method: 'POST', body: JSON.stringify({ name, password }) });
+    showApiKeyValue(data, 'API Key berhasil dibuat');
+    refreshApiKeys();
+  } catch (e) { toast('Gagal membuat API key: ' + e.message, 'error'); button.disabled = false; button.textContent = 'Create Key'; }
+}
+function openRevealApiKeyModal(id) {
+  const name = apiKeyEsc(apiKeysCache.find((key) => key.id === id)?.name || 'API Key');
+  document.getElementById('modal-root').innerHTML = `<div class="modal-backdrop" onclick="if(event.target===this)this.remove()"><div class="modal">
+    <h3>Reveal “${name}”</h3><p style="color:var(--ink-muted);font-size:12.5px">Masukkan password admin untuk melihat key lengkap.</p>
+    <label for="api-key-reveal-password">Password admin</label><input id="api-key-reveal-password" type="password" autocomplete="current-password" />
+    <div class="modal-actions"><button class="secondary" onclick="document.getElementById('modal-root').innerHTML=''">Batal</button><button id="api-key-reveal-submit" onclick="revealApiKey('${id}')">Reveal</button></div>
+  </div></div>`;
+  document.getElementById('api-key-reveal-password').focus();
+}
+async function revealApiKey(id) {
+  const password = document.getElementById('api-key-reveal-password').value;
+  if (!password) { toast('Password admin wajib diisi.', 'error'); return; }
+  const button = document.getElementById('api-key-reveal-submit'); button.disabled = true; button.textContent = 'Membuka...';
+  try {
+    const data = await api(`/auth/api-keys/${encodeURIComponent(id)}/reveal`, { method: 'POST', body: JSON.stringify({ password }) });
+    showApiKeyValue(data, 'API Key');
+  } catch (e) { toast('Gagal reveal: ' + e.message, 'error'); button.disabled = false; button.textContent = 'Reveal'; }
+}
+function showApiKeyValue(data, title) {
+  document.getElementById('modal-root').innerHTML = `<div class="modal-backdrop"><div class="modal">
+    <h3>${apiKeyEsc(title)}</h3><p style="color:var(--ink-muted);font-size:12.5px">Key “${apiKeyEsc(data.name)}”. Jangan kirim melalui chat atau menyimpannya di source code.</p>
+    <label for="api-key-result">API Key</label>
+    <div style="display:flex;gap:8px"><input id="api-key-result" type="password" readonly value="${apiKeyEsc(data.apiKey)}" style="font-family:monospace;flex:1" /><button class="secondary" onclick="toggleApiKeyValue()" aria-label="Tampilkan atau sembunyikan API key">Reveal</button></div>
+    <div class="modal-actions"><button class="secondary" onclick="copyApiKey()">Salin Key</button><button onclick="document.getElementById('modal-root').innerHTML=''">Selesai</button></div>
+  </div></div>`;
+}
+function toggleApiKeyValue() {
+  const input = document.getElementById('api-key-result');
+  input.type = input.type === 'password' ? 'text' : 'password';
+}
+async function copyApiKey() {
+  const input = document.getElementById('api-key-result');
+  try { await navigator.clipboard.writeText(input.value); toast('API key disalin.', 'success'); }
+  catch { input.type = 'text'; input.select(); document.execCommand('copy'); toast('API key disalin.', 'success'); }
+}
+function openRevokeApiKeyModal(id) {
+  const name = apiKeyEsc(apiKeysCache.find((key) => key.id === id)?.name || 'API Key');
+  document.getElementById('modal-root').innerHTML = `<div class="modal-backdrop" onclick="if(event.target===this)this.remove()"><div class="modal">
+    <h3>Revoke “${name}”?</h3><p style="color:var(--red);font-size:12.5px">Aplikasi yang memakai key ini langsung kehilangan akses. Tindakan ini tidak bisa dibatalkan.</p>
+    <label for="api-key-revoke-password">Password admin</label><input id="api-key-revoke-password" type="password" autocomplete="current-password" />
+    <div class="modal-actions"><button class="secondary" onclick="document.getElementById('modal-root').innerHTML=''">Batal</button><button class="danger" id="api-key-revoke-submit" onclick="revokeApiKey('${id}')">Revoke Key</button></div>
+  </div></div>`;
+  document.getElementById('api-key-revoke-password').focus();
+}
+async function revokeApiKey(id) {
+  const password = document.getElementById('api-key-revoke-password').value;
+  if (!password) { toast('Password admin wajib diisi.', 'error'); return; }
+  const button = document.getElementById('api-key-revoke-submit'); button.disabled = true; button.textContent = 'Mencabut...';
+  try {
+    await api(`/auth/api-keys/${encodeURIComponent(id)}`, { method: 'DELETE', body: JSON.stringify({ password, confirm: true }) });
+    document.getElementById('modal-root').innerHTML = ''; toast('API key berhasil dicabut.', 'success'); refreshApiKeys();
+  } catch (e) { toast('Gagal revoke: ' + e.message, 'error'); button.disabled = false; button.textContent = 'Revoke Key'; }
 }
 
 function fmtUptime(seconds) {
@@ -2861,36 +3235,45 @@ async function refreshTools() {
 }
 function renderToolsGrid() {
   const grid = document.getElementById('tools-grid');
+  const summary = document.getElementById('tools-summary');
   const query = (document.getElementById('tools-search')?.value || '').trim().toLowerCase();
   const filtered = !query ? toolsCache : toolsCache.filter((t) =>
     t.name.toLowerCase().includes(query) || (t.category || '').toLowerCase().includes(query) || t.key.toLowerCase().includes(query));
-
+  const installed = toolsCache.filter((t) => t.installed).length;
+  summary.innerHTML = `<span class="badge ok">${installed} installed</span><span class="badge">${toolsCache.length - installed} available</span>`;
   if (!filtered.length) { grid.innerHTML = '<div class="empty">Tidak ada tool yang cocok.</div>'; return; }
-
   const categories = [...new Set(filtered.map((t) => t.category || 'Lainnya'))];
-  grid.innerHTML = categories.map((cat) => `
-    <div style="margin-bottom:22px">
-      <h2 style="font-size:13px;margin-bottom:10px">${cat}</h2>
-      <div class="grid">
-        ${filtered.filter((t) => (t.category || 'Lainnya') === cat).map((t) => `
-        <div class="app-card">
-          <div class="card-top"><span class="card-name">${t.name}</span><span class="card-status"><span class="dot ${t.installed ? 'green' : 'gray'}"></span>${t.installed ? 'terinstall' : 'belum'}</span></div>
-          <div class="card-actions">
-            ${t.installed ? `<button class="danger" onclick="uninstallTool('${t.key}','${t.name.replace(/'/g, "\\'")}')">Uninstall</button>` : `<button onclick="installTool('${t.key}', this)">Install</button>`}
-          </div>
+  grid.innerHTML = categories.map((cat) => {
+    const items = filtered.filter((t) => (t.category || 'Lainnya') === cat);
+    return `<section class="tools-category">
+      <div class="tools-category-head"><span class="dot ${items.some((t) => t.installed) ? 'green' : 'gray'}"></span><h2>${cat}</h2><span class="tools-category-count">${items.length} tool</span></div>
+      <div class="tools-card-grid">${items.map((t) => `<div class="tool-card">
+        <div class="tool-card-top"><span class="tool-card-name">${t.name}</span><span class="tool-status ${t.installed ? 'installed' : ''}">${t.installed ? 'Installed' : 'Not installed'}</span></div>
+        <div style="font-size:11px;color:var(--ink-muted);margin:-3px 0 10px;overflow-wrap:anywhere">
+          Package: <code>${apiKeyEsc(t.packageName || t.key)}</code>${t.installed ? ` · Version: <code>${apiKeyEsc(t.version || 'tidak terdeteksi')}</code>` : ''}
         </div>
-        `).join('')}
-      </div>
-    </div>
-  `).join('');
+        ${t.installed
+          ? `<button class="secondary" style="border-color:rgba(239,68,68,.45);color:#f87171" onclick="uninstallTool('${t.key}','${t.name.replace(/'/g, "\\'")}')">Uninstall</button>`
+          : `<button class="secondary" style="border-color:rgba(124,108,240,.55);color:#a99df7" onclick="installTool('${t.key}','${t.name.replace(/'/g, "\\'")}')">Install</button>`}
+      </div>`).join('')}</div>
+    </section>`;
+  }).join('');
 }
-async function installTool(key, btn) {
-  btn.disabled = true; btn.textContent = 'Menginstall...';
-  try {
-    await api(`/tools/${encodeURIComponent(key)}/install`, { method: 'POST' });
-    toast(`${key} berhasil diinstall.`, 'success');
-    refreshTools();
-  } catch (e) { toast(`Gagal install ${key}: ${e.message}`, 'error'); btn.disabled = false; btn.textContent = 'Install'; }
+function installTool(key, name) {
+  showConfirmModal({
+    title: `Install "${name}"?`,
+    description: 'Panel akan menjalankan apt-get update lalu memasang package ini. Proses dapat mengubah dependency sistem dan membutuhkan beberapa menit.',
+    danger: false,
+    confirmLabel: 'Install',
+    onConfirm: async () => {
+      toast(`Menginstall ${name}...`);
+      try {
+        await api(`/tools/${encodeURIComponent(key)}/install`, { method: 'POST', body: JSON.stringify({ confirm: true }) });
+        toast(`${name} berhasil diinstall.`, 'success');
+        refreshTools();
+      } catch (e) { toast(`Gagal install ${name}: ${e.message}`, 'error'); }
+    },
+  });
 }
 function uninstallTool(key, name) {
   showConfirmModal({
@@ -2962,37 +3345,29 @@ function fmRefresh(targetPath) {
     crumbs.push(`<span style="cursor:pointer;color:var(--accent)" onclick="fmRefresh('${p.replace(/'/g, "\\'")}')"> / ${part}</span>`);
   });
   crumbEl.innerHTML = crumbs.join('');
-  list.innerHTML = '<div class="empty">Memuat...</div>';
+  list.scrollTop = 0;
+  list.innerHTML = '<div class="empty" style="margin:14px">Memuat...</div>';
   api(`/filemanager/list?path=${encodeURIComponent(fmCurrentPath)}`).then((data) => {
-    if (!data.entries.length) { list.innerHTML = '<div class="empty">Folder kosong.</div>'; return; }
-    list.innerHTML = `
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden">
-        ${data.entries.map((e) => {
-          const fullPath = (fmCurrentPath === '/' ? '' : fmCurrentPath) + '/' + e.name;
-          const icon = e.type === 'dir'
-            ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:#eab308"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>'
-            : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:#8b93a7"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>';
-          const escaped = fullPath.replace(/'/g, "\\'");
-          return `
-          <div class="proj-card" style="border:none;border-bottom:1px solid var(--border);border-radius:0;padding:10px 14px">
-            <div style="display:flex;align-items:center;gap:10px;overflow:hidden;cursor:${e.type === 'dir' ? 'pointer' : 'default'}" ${e.type === 'dir' ? `onclick="fmRefresh('${escaped}')"` : ''}>
-              ${icon}
-              <div style="overflow:hidden">
-                <div class="row-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.name}</div>
-                <div class="row-meta">${e.type === 'dir' ? '-' : fmFmtSize(e.size)} — ${e.owner} — ${e.mtime}</div>
-              </div>
-            </div>
-            <div style="display:flex;gap:6px;flex-shrink:0">
-              ${e.type === 'file' ? `<button class="secondary" onclick="fmEdit('${escaped}')">Edit</button><button class="secondary" onclick="fmDownload('${escaped}')">⬇</button>` : ''}
-              <button class="secondary" onclick="fmRenamePrompt('${escaped}')">Rename</button>
-              <button class="secondary" onclick="fmPermissionModal('${escaped}', '${e.owner}', '${e.group}', '${e.perms}')">Permission</button>
-              <button class="danger" onclick="fmDelete('${escaped}')">Hapus</button>
-            </div>
-          </div>`;
-        }).join('')}
-      </div>
-    `;
-  }).catch((e) => { list.innerHTML = `<div class="empty">Gagal: ${e.message}</div>`; });
+    if (!data.entries.length) { list.innerHTML = '<div class="empty" style="margin:14px">Folder kosong.</div>'; return; }
+    list.innerHTML = data.entries.map((e) => {
+      const fullPath = (fmCurrentPath === '/' ? '' : fmCurrentPath) + '/' + e.name;
+      const icon = e.type === 'dir'
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;color:#eab308;flex-shrink:0"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;color:#8b93a7;flex-shrink:0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>';
+      const escaped = fullPath.replace(/'/g, "\\'");
+      return `<div class="proj-card fm-entry">
+        <div class="fm-entry-main" style="cursor:${e.type === 'dir' ? 'pointer' : 'default'}" ${e.type === 'dir' ? `onclick="fmRefresh('${escaped}')"` : ''}>
+          ${icon}<div style="min-width:0"><div class="row-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.name}</div><div class="row-meta">${e.type === 'dir' ? 'Folder' : fmFmtSize(e.size)} · ${e.owner}:${e.group} · ${e.perms} · ${e.mtime}</div></div>
+        </div>
+        <div class="fm-entry-actions">
+          ${e.type === 'file' ? `<button class="secondary compact-button" onclick="fmEdit('${escaped}')">Edit</button><button class="secondary compact-button" onclick="fmDownload('${escaped}')">Download</button>` : ''}
+          <button class="secondary compact-button" onclick="fmRenamePrompt('${escaped}')">Rename</button>
+          <button class="secondary compact-button" onclick="fmPermissionModal('${escaped}', '${e.owner}', '${e.group}', '${e.perms}')">Permission</button>
+          <button class="danger compact-button" onclick="fmDelete('${escaped}')">Hapus</button>
+        </div>
+      </div>`;
+    }).join('');
+  }).catch((e) => { list.innerHTML = `<div class="empty" style="margin:14px">Gagal: ${e.message}</div>`; });
 }
 function fmNewFolderModal() {
   showInputModal({
@@ -3406,33 +3781,40 @@ async function refreshDockerExecContainers() {
   } catch (e) { toast('Gagal ambil daftar container: ' + e.message, 'error'); }
 }
 
+function dockerExecEmptyState() {
+  return `<div class="dockerexec-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l4 3-4 3M13 15h4"/></svg><b>Pilih container untuk memulai</b><span>Shell akan dibuka di panel ini.</span></div>`;
+}
 function connectDockerExec() {
   const container = document.getElementById('dockerexec-container-select').value;
   const box = document.getElementById('dockerexec-container');
-  if (dockerExecSocket) { dockerExecManualDisconnect = true; try { dockerExecSocket.close(); } catch {} }
+  const status = document.getElementById('dockerexec-status');
+  if (dockerExecSocket) {
+    const previousSocket = dockerExecSocket;
+    dockerExecSocket = null;
+    previousSocket.onclose = null;
+    try { previousSocket.close(); } catch {}
+  }
   clearTimeout(dockerExecReconnectTimer);
   dockerExecReconnectAttempt = 0;
   dockerExecManualDisconnect = false;
   box.innerHTML = '';
   document.getElementById('dockerexec-infobar').style.display = 'none';
   document.getElementById('dockerexec-envcard').style.display = 'none';
-  if (!container) return;
-
+  document.getElementById('dockerexec-terminal-title').textContent = container || 'container shell';
+  status.className = 'badge';
+  status.textContent = container ? 'Menghubungkan...' : 'Belum tersambung';
+  if (!container) { box.innerHTML = dockerExecEmptyState(); return; }
   dockerExecInstance = new Terminal({
-    theme: { background: '#0a0d12', foreground: '#e7e9ee', cursor: '#2596ec' },
-    fontSize: 13,
-    fontFamily: 'Menlo, Consolas, monospace',
-    cursorBlink: true,
+    theme: { background: '#080b10', foreground: '#e7e9ee', cursor: '#2596ec', selection: '#2596ec44' },
+    fontSize: 13, fontFamily: 'Menlo, Consolas, monospace', cursorBlink: true, scrollback: 3000,
   });
   dockerExecFitAddon = new FitAddon.FitAddon();
   dockerExecInstance.loadAddon(dockerExecFitAddon);
   dockerExecInstance.open(box);
   dockerExecFitAddon.fit();
-
   dockerExecInstance.onData((data) => {
     if (dockerExecSocket && dockerExecSocket.readyState === WebSocket.OPEN) dockerExecSocket.send(JSON.stringify({ type: 'input', data }));
   });
-
   openDockerExecSocket();
   refreshDockerExecInfo(container);
 }
@@ -3450,24 +3832,20 @@ async function refreshDockerExecInfo(container) {
     ]);
     const stat = (statsResult.stats || []).find((s) => s.name === container);
     infobar.style.display = 'block';
-    infobar.innerHTML = `
-      <div style="display:flex;flex-wrap:wrap;gap:24px;font-size:12px">
-        <div><div style="color:var(--ink-muted);font-size:10.5px;text-transform:uppercase">Container</div><div style="font-weight:600">${container}</div></div>
-        <div><div style="color:var(--ink-muted);font-size:10.5px;text-transform:uppercase">Image</div><div>${inspect.image}</div></div>
-        <div><div style="color:var(--ink-muted);font-size:10.5px;text-transform:uppercase">Working Dir</div><div>${inspect.workingDir}</div></div>
-        <div><div style="color:var(--ink-muted);font-size:10.5px;text-transform:uppercase">User</div><div>${inspect.user}</div></div>
-        ${stat ? `<div><div style="color:var(--ink-muted);font-size:10.5px;text-transform:uppercase">CPU</div><div>${stat.cpuPercent}%</div></div><div><div style="color:var(--ink-muted);font-size:10.5px;text-transform:uppercase">Memory</div><div>${stat.memUsage}</div></div>` : ''}
-      </div>
-    `;
+    infobar.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;padding:13px 16px">
+      <div><div class="mini-label">Container</div><b>${container}</b></div>
+      <div><div class="mini-label">Image</div><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${inspect.image}">${inspect.image}</div></div>
+      <div><div class="mini-label">Working Dir</div><div style="font-family:monospace">${inspect.workingDir || '/'}</div></div>
+      <div><div class="mini-label">User</div><div>${inspect.user || 'default'}</div></div>
+      ${stat ? `<div><div class="mini-label">CPU</div><b>${stat.cpuPercent}%</b></div><div><div class="mini-label">Memory</div><b>${stat.memUsage}</b></div>` : ''}
+    </div>`;
     if (inspect.env.length) {
       envCard.style.display = 'block';
-      document.getElementById('dockerexec-env-list').innerHTML = inspect.env.map((e) => `<div style="padding:2px 0;border-bottom:1px solid var(--border);word-break:break-all"><b>${e.key}</b>=${e.value}</div>`).join('');
-    } else {
-      envCard.style.display = 'none';
-    }
+      document.getElementById('dockerexec-env-list').innerHTML = inspect.env.map((e) => `<div style="padding:5px 0;border-bottom:1px solid var(--border);word-break:break-all"><b style="color:#c4b5fd">${e.key}</b><span style="color:var(--ink-muted)">=${e.value}</span></div>`).join('');
+    } else envCard.style.display = 'none';
   } catch (e) {
     infobar.style.display = 'block';
-    infobar.innerHTML = `<div class="empty">Gagal ambil info container: ${e.message}</div>`;
+    infobar.innerHTML = `<div class="empty" style="margin:12px">Gagal ambil info container: ${e.message}</div>`;
   }
 }
 
@@ -3478,25 +3856,35 @@ function openDockerExecSocket() {
   const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const params = new URLSearchParams({ container, shell: shellChoice });
   if (AUTH_MODE === 'api-key') params.set('key', API_KEY);
-  dockerExecSocket = new WebSocket(`${wsProtocol}//${location.host}/docker-exec?${params}`);
+  const socket = new WebSocket(`${wsProtocol}//${location.host}/docker-exec?${params}`);
+  dockerExecSocket = socket;
 
-  dockerExecSocket.onopen = () => {
+  socket.onopen = () => {
+    if (dockerExecSocket !== socket) return;
     dockerExecReconnectAttempt = 0;
+    const status = document.getElementById('dockerexec-status');
+    status.className = 'badge ok';
+    status.textContent = 'Tersambung';
     dockerExecInstance.writeln(`\x1b[32m[Tersambung ke container "${container}"]\x1b[0m`);
   };
-  dockerExecSocket.onmessage = (event) => {
+  socket.onmessage = (event) => {
+    if (dockerExecSocket !== socket) return;
     const msg = JSON.parse(event.data);
     if (msg.type === 'data') dockerExecInstance.write(msg.data);
     else if (msg.type === 'exit') dockerExecInstance.writeln(`\r\n\x1b[31m[Shell keluar, kode: ${msg.exitCode}]\x1b[0m`);
   };
-  dockerExecSocket.onclose = () => {
+  socket.onclose = () => {
+    if (dockerExecSocket !== socket) return;
+    const status = document.getElementById('dockerexec-status');
+    status.className = 'badge bad';
+    status.textContent = 'Terputus';
     if (dockerExecManualDisconnect) return;
     const delay = TERM_RECONNECT_DELAYS[Math.min(dockerExecReconnectAttempt, TERM_RECONNECT_DELAYS.length - 1)];
     dockerExecInstance.writeln(`\r\n\x1b[33m[Koneksi terputus, nyambung ulang otomatis dalam ${delay / 1000}s...]\x1b[0m`);
     dockerExecReconnectAttempt++;
     dockerExecReconnectTimer = setTimeout(() => { if (currentPage === 'dockerexec') openDockerExecSocket(); }, delay);
   };
-  dockerExecSocket.onerror = () => toast('Gagal konek ke container.', 'error');
+  socket.onerror = () => { if (dockerExecSocket === socket) toast('Gagal konek ke container.', 'error'); };
 }
 
 window.addEventListener('resize', () => {

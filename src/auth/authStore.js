@@ -152,6 +152,11 @@ function createSession({ username, password, ip, userAgent }) {
   }, { timeoutMs: 15000, staleMs: 60000 });
 }
 
+function verifyAdminPassword(password) {
+  const store = loadStore();
+  if (!store.admin) return false;
+  return safeEqualHex(digest(String(password || ''), store.admin.passwordSalt), store.admin.passwordHash);
+}
 function verifySession(token, csrfToken = null) {
   if (!token) return null;
   const store = loadStore();
@@ -226,6 +231,7 @@ module.exports = {
   generateSetupToken,
   createAdmin,
   createSession,
+  verifyAdminPassword,
   verifySession,
   revokeSession,
   resetPassword,

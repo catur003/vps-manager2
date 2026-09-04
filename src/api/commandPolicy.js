@@ -115,7 +115,7 @@ const POLICY = {
 
   // --- Tools / Installer ---
   'tools.list': { confirmRequired: false, auditLevel: 'read' },
-  'tools.install': { confirmRequired: false, auditLevel: 'write' },
+  'tools.install': { confirmRequired: true, auditLevel: 'write' },
 
   // --- SSH Keys (authorized_keys deploy_user) ---
   'sshkeys.list': { confirmRequired: false, auditLevel: 'read' },

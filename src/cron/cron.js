@@ -9,6 +9,7 @@ const WRAPPER_PATH = path.join(__dirname, '..', '..', 'scripts', 'cron-wrapper.s
 // bingung). Command asli disimpan dalam TANDA KUTIP TUNGGAL - escape yang
 // dipakai cuma `'\''` (pola standar shell buat quote-dalam-quote).
 const WRAPPED_LINE_REGEX = new RegExp(`^${WRAPPER_PATH.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} (\\S+) '(.*)'$`);
+const NAMED_WRAPPED_LINE_REGEX = new RegExp(`^${WRAPPER_PATH.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} (\\S+) '(.*)' ([A-Za-z0-9_-]+)$`);
 
 function unescapeSingleQuotes(str) {
   return str.replace(/'\\''/g, "'");
@@ -22,9 +23,16 @@ function escapeSingleQuotes(str) {
  * Bungkus command asli pakai cron-wrapper.sh + jobId baru (random, stabil
  * dipakai sebagai kunci pencocokan history run - lihat getHistory()).
  */
-function wrapCommand(command) {
-  const jobId = crypto.randomBytes(4).toString('hex');
-  return `${WRAPPER_PATH} ${jobId} '${escapeSingleQuotes(command.trim())}'`;
+function normalizeName(name) { return String(name || '').trim(); }
+function isValidName(name) { return name === undefined || (typeof name === 'string' && !/[\r\n]/.test(name) && normalizeName(name).length <= 80); }
+function encodeName(name) { return Buffer.from(normalizeName(name), 'utf8').toString('base64url'); }
+function decodeName(token) { try { return Buffer.from(token, 'base64url').toString('utf8'); } catch { return ''; } }
+function formatWrappedCommand(jobId, command, name) {
+  const base = `${WRAPPER_PATH} ${jobId} '${escapeSingleQuotes(command.trim())}'`;
+  return normalizeName(name) ? `${base} ${encodeName(name)}` : base;
+}
+function wrapCommand(command, name) {
+  return formatWrappedCommand(crypto.randomBytes(4).toString('hex'), command, name);
 }
 
 /**
@@ -64,12 +72,14 @@ function list(user) {
     // Kalau command-nya dibungkus cron-wrapper.sh (job yang dibuat/di-edit
     // lewat panel ini), tampilkan command ASLI-nya ke user (bukan internal
     // wrapper-nya) + jobId buat disambungkan ke history run.
-    const wrappedMatch = match[2].match(WRAPPED_LINE_REGEX);
+    const namedWrappedMatch = match[2].match(NAMED_WRAPPED_LINE_REGEX);
+    const wrappedMatch = namedWrappedMatch || match[2].match(WRAPPED_LINE_REGEX);
     entries.push({
       index, // posisi baris ASLI (termasuk komentar/baris kosong) - dipakai referensi update/hapus, BUKAN index ke array `entries` ini
       schedule: match[1],
       command: wrappedMatch ? unescapeSingleQuotes(wrappedMatch[2]) : match[2],
       jobId: wrappedMatch ? wrappedMatch[1] : null,
+      name: namedWrappedMatch ? decodeName(namedWrappedMatch[3]) : null,
       enabled: !isDisabled,
       raw: rawLine,
     });
@@ -127,23 +137,26 @@ function getRawLines(user) {
   return result.output.split('\n').filter((l, i, arr) => !(l === '' && i === arr.length - 1)); // buang trailing empty line doang
 }
 
-function add(user, schedule, command) {
+function add(user, schedule, command, name) {
   if (!isValidSchedule(schedule)) {
     return { ok: false, errorMessage: 'Format jadwal cron tidak valid. Harus 5 field (menit jam tanggal bulan hari), mis. "0 2 * * *".' };
   }
   if (!command || typeof command !== 'string' || !command.trim()) {
     return { ok: false, errorMessage: 'Command wajib diisi.' };
   }
+  if (!isValidName(name)) return { ok: false, errorMessage: 'Nama cron maksimal 80 karakter.' };
   const lines = getRawLines(user);
   if (lines === null) return { ok: false, errorMessage: 'Gagal baca crontab user ini.' };
-  lines.push(`${schedule.trim()} ${wrapCommand(command)}`);
+  lines.push(`${schedule.trim()} ${wrapCommand(command, name)}`);
   return writeRawLines(user, lines);
 }
 
-function update(user, lineIndex, schedule, command) {
+function update(user, lineIndex, schedule, command, name) {
   if (!isValidSchedule(schedule)) {
     return { ok: false, errorMessage: 'Format jadwal cron tidak valid.' };
   }
+  if (!command || typeof command !== 'string' || !command.trim()) return { ok: false, errorMessage: 'Command wajib diisi.' };
+  if (!isValidName(name)) return { ok: false, errorMessage: 'Nama cron maksimal 80 karakter.' };
   const lines = getRawLines(user);
   if (lines === null) return { ok: false, errorMessage: 'Gagal baca crontab user ini.' };
   if (lineIndex < 0 || lineIndex >= lines.length) return { ok: false, errorMessage: 'Baris cron tidak ditemukan (mungkin sudah berubah - refresh dulu).' };
@@ -154,10 +167,10 @@ function update(user, lineIndex, schedule, command) {
   // cuma kalau ini pertama kalinya baris ini di-edit lewat panel.
   const existingLine = (wasDisabled ? lines[lineIndex].replace('#DISABLED#', '') : lines[lineIndex]).trim();
   const existingMatch = existingLine.match(CRON_LINE_REGEX);
-  const existingWrapped = existingMatch && existingMatch[2].match(WRAPPED_LINE_REGEX);
-  const wrappedCommand = existingWrapped
-    ? `${WRAPPER_PATH} ${existingWrapped[1]} '${escapeSingleQuotes(command.trim())}'`
-    : wrapCommand(command);
+  const existingNamedWrapped = existingMatch && existingMatch[2].match(NAMED_WRAPPED_LINE_REGEX);
+  const existingWrapped = existingNamedWrapped || (existingMatch && existingMatch[2].match(WRAPPED_LINE_REGEX));
+  const effectiveName = name === undefined ? (existingNamedWrapped ? decodeName(existingNamedWrapped[3]) : '') : normalizeName(name);
+  const wrappedCommand = existingWrapped ? formatWrappedCommand(existingWrapped[1], command, effectiveName) : wrapCommand(command, effectiveName);
 
   lines[lineIndex] = `${wasDisabled ? '#DISABLED#' : ''}${schedule.trim()} ${wrappedCommand}`;
   return writeRawLines(user, lines);
