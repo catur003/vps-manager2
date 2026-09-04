@@ -458,7 +458,15 @@ function changeRootPassword(newPassword) {
     return { ok: false, errorMessage: 'Password baru wajib diisi.' };
   }
   const escapedPassword = escapeSqlString(newPassword);
-  const sql = `ALTER USER '${user}'@'localhost' IDENTIFIED VIA mysql_native_password USING PASSWORD('${escapedPassword}'); FLUSH PRIVILEGES;`;
+  // FIXED: sebelumnya `IDENTIFIED VIA mysql_native_password USING
+  // PASSWORD('...')` - syntax KHUSUS MariaDB. Di MySQL 8 (yang menurut
+  // CHANGELOG dipakai server produksi sekarang, `mysql-server`) ini syntax
+  // error keras (`VIA` tidak dikenal, dan fungsi PASSWORD() sudah dihapus di
+  // MySQL 8.0), dan di MariaDB 11.4+ plugin mysql_native_password juga sudah
+  // dihapus - jadi versi lama rusak di KEDUA arah. Plain `IDENTIFIED BY`
+  // didukung universal (MySQL 8 & semua MariaDB) - sama seperti yang sudah
+  // dipakai setupRootDatabase()/createDatabase()/resetPassword().
+  const sql = `ALTER USER '${user}'@'localhost' IDENTIFIED BY '${escapedPassword}'; FLUSH PRIVILEGES;`;
   const result = runSQL(sql);
   if (!result.ok) return { ok: false, errorMessage: result.errorMessage };
   return { ok: true };
@@ -549,7 +557,13 @@ function setupRootDatabase() {
 
   const installResult = shell.run(
     [
-      'sudo apt-get update -y >/dev/null 2>&1',
+      // FIXED: sebelumnya `sudo apt-get update -y` - flag -y di `update`
+      // sebenarnya no-op, TAPI rule sudoers (scripts/setup-sudoers.sh)
+      // nge-whitelist persis `apt-get update` TANPA argumen tambahan, jadi
+      // pas fungsi ini dipanggil sebagai deploy_user (bukan root) command-nya
+      // ditolak sudo ("not allowed to execute") dan self-heal path gagal di
+      // langkah pertama. Tanpa -y, command match rule sudoers apa adanya.
+      'sudo apt-get update >/dev/null 2>&1',
       'sudo apt-get install -y mariadb-server >/dev/null 2>&1',
       'sudo systemctl enable --now mariadb >/dev/null 2>&1',
       // FIXED: check sukses/gagal SEBELUMNYA (`command -v mysql`) ngecek

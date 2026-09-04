@@ -681,6 +681,7 @@ async function main() {
     const deleteProject = require(path.join(ROOT, 'src/project/deleteProject'));
     const originalRunAsUser = shellModule.runAsUser;
     const originalRun = shellModule.run;
+    const originalRunArgs = shellModule.runArgs;
     const name = '__selftest_delproj_nginxfail__';
 
     try {
@@ -689,6 +690,12 @@ async function main() {
 
       shellModule.runAsUser = () => ({ ok: true, output: '[]' });
       shellModule.run = () => ({ ok: false, output: '', errorMessage: 'Permission denied (simulasi)' }); // nginx listSites gagal
+      // FIXED: nginx.js memanggil shell.runArgs() (execFileSync), BUKAN
+      // shell.run() - mock run() saja tidak meng-intercept listSites(), jadi
+      // test ini dulu selalu baca state nginx BENERAN (site tidak ada ->
+      // "dilewati") dan false-fail. runArgs ikut di-mock gagal supaya skenario
+      // "gagal CEK nginx" benar-benar tercipta.
+      shellModule.runArgs = () => ({ ok: false, output: '', errorMessage: 'Permission denied (simulasi)' });
 
       const project = registry.findProject(name);
       const preview = deleteProject.preview(project);
@@ -703,6 +710,7 @@ async function main() {
     } finally {
       shellModule.runAsUser = originalRunAsUser;
       shellModule.run = originalRun;
+      shellModule.runArgs = originalRunArgs;
       try { registry.removeProject(name); } catch (e) {}
     }
   }

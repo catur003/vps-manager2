@@ -119,7 +119,7 @@ apt-get install -y \
   git curl ca-certificates gnupg \
   openssl \
   nginx certbot \
-  mariadb-server default-mysql-client \
+  mariadb-server mariadb-client \
   fail2ban \
   ufw \
   build-essential
