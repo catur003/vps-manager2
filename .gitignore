@@ -6,11 +6,14 @@ node_modules/
 .env*.local
 
 # Runtime data (server-specific, jangan di-commit)
+data/
 data/config.json
 data/jobs.json
 data/db-registry.json
 data/registry.json
 data/.secret.key
+data/.api-key-master
+data/.api-keys.lock
 data/alert-state.json
 data/auth.json
 data/.auth.lock
