@@ -120,12 +120,26 @@ Overview, Terminal, File Manager, Apps (PM2), Docker, Docker Exec, Deployments, 
 
 ## 7. Preferensi Standing User (berlaku lintas sesi, bukan cuma project ini)
 
+Ringkasan cepat:
 - **Major version upgrade dependency** (Next.js dkk): jangan force-upgrade app yang sudah production/jalan. Versi major terbaru cuma dipakai buat project BARU.
 - **App mobile "zenime" (Aniro)**: sudah terinstall di HP user — WAJIB kasih notice dulu sebelum ubah kode apapun di app itu.
 - **Verifikasi sebelum setuju**: user minta verifikasi independen dulu terhadap klaim/diagnosis teknis, jangan langsung percaya laporan begitu saja.
 - User lebih suka dikasih **saran dulu, baru eksekusi** untuk pekerjaan besar/ambigu (bukan langsung jalan tanpa preview rencana).
 - **Gak suka emoji** di UI tombol/label yang baru ditambahkan.
 - **Security-first**: kalau ada dilema antara kemudahan vs keamanan (mis. sudoers scope, redact log), pilih yang lebih aman meski lebih ribet.
+
+### Isi lengkap (verbatim dari memory persisten Claude, biar konteksnya utuh)
+
+**major-version-upgrade-policy**
+> When a running production app has a dependency with known security vulnerabilities that are only fully patched by a major version bump (e.g. Next.js 14 -> 16), the user prefers to apply the safe same-major patch release (e.g. 14.2.35) rather than force the major upgrade on an app that's already live and working. Major upgrades carry real risk of breaking changes and aren't worth it just to close out lower-severity findings (e.g. DoS/cache-poisoning issues that need specific conditions, as opposed to something like RCE).
+>
+> Instead, the user's rule is: adopt the latest major version (e.g. Next.js 16) only when starting a brand-new project from scratch, not by upgrading an existing app in place. So when scaffolding a new project, default to the latest stable major of the framework being used; when patching an existing app's vulnerabilities, prefer the minimal same-major fix and only propose a major upgrade if the user asks for one.
+
+**verify-before-agreeing**
+> When the user shares a proposed diagnosis, root-cause analysis, or fix (whether from another tool, another agent's report, or their own hypothesis) and asks whether it should be applied, do not simply agree or implement it on the strength of the write-up alone. The user has explicitly called this out before ("kamu cek apa cuma langsung setuju" — "did you actually check, or did you just agree?") after being given a proposed fix. Independently verify the underlying claim against real data first — run the actual code path, fetch the actual page/API, inspect the actual file — and only then recommend applying, modifying, or rejecting the proposal. This mirrors an earlier, more specific correction in the same vein: the user demanded real-browser verification (not `curl`) for a scraper bug, rejecting reasoning based on assumptions about what a page "should" show. The pattern generalizes: prefer direct empirical verification over trusting a plausible-sounding explanation, especially before making a code change.
+
+**zenime-changes-need-notice**
+> For the `zenime` mobile app (repo at `/home/ubuntu/zenime`, branded "Aniro"), the user has already built an EAS APK and installed it on their own device. Because of this, they explicitly asked that any future code change to `zenime` come with advance notice first, rather than being applied silently — unlike other repos (e.g. `anime-web`) where direct fixes are fine once approved in the conversation. In practice this means: before editing files in `zenime`, flag what's about to change and why, and treat committing/pushing/rebuilding as a separate step the user should be told about (or asked about) rather than something to do automatically right after an edit — since a change that isn't reflected in a rebuilt APK could otherwise cause confusion about what's actually running on their installed app.
 
 ---
 
