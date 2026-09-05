@@ -838,7 +838,13 @@ async function main() {
       shellModule.runArgs = (file, args) => {
         commands.push([file, ...args].join(' '));
         if (args.includes('SHOW GRANTS FOR CURRENT_USER;')) {
-          return { ok: true, output: 'GRANT ALL PRIVILEGES ON *.* TO admin@localhost WITH GRANT OPTION' };
+          return {
+            ok: true,
+            output:
+              'GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, RELOAD, PROCESS, REFERENCES, INDEX, ALTER, ' +
+              'CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, ' +
+              'CREATE USER, EVENT, TRIGGER ON *.* TO `existing_admin`@`127.0.0.1` WITH GRANT OPTION',
+          };
         }
         return { ok: false, output: '', errorMessage: 'query tidak diharapkan oleh self-test' };
       };

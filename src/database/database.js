@@ -550,13 +550,38 @@ function testAdminCredentials(dbUser, password) {
   );
   if (!result.ok) return { ok: false, errorMessage: interpretMysqlError(result.errorMessage) };
   const grants = result.output || '';
-  const hasGlobalAdmin = /GRANT ALL PRIVILEGES ON \*\.\*/i.test(grants);
-  const hasGrantOption = /WITH GRANT OPTION/i.test(grants);
-  if (!hasGlobalAdmin || !hasGrantOption) {
+  const requiredPrivileges = [
+    'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'DROP', 'REFERENCES',
+    'INDEX', 'ALTER', 'CREATE TEMPORARY TABLES', 'LOCK TABLES', 'EXECUTE',
+    'CREATE VIEW', 'SHOW VIEW', 'CREATE ROUTINE', 'ALTER ROUTINE',
+    'CREATE USER', 'EVENT', 'TRIGGER',
+  ];
+  const grantedPrivileges = new Set();
+  let hasAllPrivileges = false;
+  let hasGlobalGrantOption = false;
+
+  // SHOW GRANTS tidak konsisten antar varian/versi. Sebagian server
+  // mengembalikan "ALL PRIVILEGES", MySQL lain mengembangkannya menjadi
+  // daftar SELECT, INSERT, UPDATE, ... yang ekuivalen. Normalisasi kedua
+  // bentuk itu; backtick pada *.* juga boleh ada.
+  grants.split('\n').forEach((rawLine) => {
+    const line = rawLine.replace(/`/g, '').trim();
+    const match = line.match(/^GRANT\s+(.+?)\s+ON\s+\*\.\*\s+TO\s+.+?\s+WITH GRANT OPTION\s*$/i);
+    if (!match) return;
+    hasGlobalGrantOption = true;
+    match[1].split(',').map((value) => value.trim().toUpperCase()).forEach((privilege) => {
+      if (privilege === 'ALL' || privilege === 'ALL PRIVILEGES') hasAllPrivileges = true;
+      grantedPrivileges.add(privilege);
+    });
+  });
+
+  const hasRequiredPrivileges =
+    hasAllPrivileges || requiredPrivileges.every((privilege) => grantedPrivileges.has(privilege));
+  if (!hasGlobalGrantOption || !hasRequiredPrivileges) {
     return {
       ok: false,
       errorMessage:
-        `User "${dbUser}" bisa login, tapi tidak punya ALL PRIVILEGES ON *.* WITH GRANT OPTION yang dibutuhkan Database Manager.`,
+        `User "${dbUser}" bisa login, tapi privilege global + WITH GRANT OPTION yang dibutuhkan Database Manager belum lengkap.`,
     };
   }
   return { ok: true };
