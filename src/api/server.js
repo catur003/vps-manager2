@@ -114,6 +114,15 @@ function createServer() {
     res.sendFile(path.join(__dirname, '..', '..', 'public', 'index.html'));
   });
 
+  // Dependency browser disajikan dari paket lokal supaya CSP tetap hanya
+  // mengizinkan script/style dari origin sendiri dan dashboard tidak
+  // bergantung pada CDN saat membuka Terminal atau grafik.
+  const nodeModulesDir = path.join(__dirname, '..', '..', 'node_modules');
+  app.get('/vendor/xterm.css', (_req, res) => res.sendFile(path.join(nodeModulesDir, 'xterm', 'css', 'xterm.css')));
+  app.get('/vendor/xterm.js', (_req, res) => res.sendFile(path.join(nodeModulesDir, 'xterm', 'lib', 'xterm.js')));
+  app.get('/vendor/xterm-addon-fit.js', (_req, res) => res.sendFile(path.join(nodeModulesDir, 'xterm-addon-fit', 'lib', 'xterm-addon-fit.js')));
+  app.get('/vendor/chart.js', (_req, res) => res.sendFile(path.join(nodeModulesDir, 'chart.js', 'dist', 'chart.umd.js')));
+
   // Dashboard web + asset statis lain di public/ (dashboard.html, dst).
   // HTML/CSS/JS boleh diambil sebelum auth; data dan aksi dashboard tetap
   // dilindungi session cookie HttpOnly + CSRF pada route API di bawah.
