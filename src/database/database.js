@@ -521,6 +521,47 @@ function testCredentials(dbName, dbUser, password) {
   return { ok: true };
 }
 
+/** Deteksi engine server dari binary daemon, bukan binary client `mysql`. */
+function detectDatabaseEngine() {
+  const result = shell.run(
+    [
+      'if command -v mariadbd >/dev/null 2>&1;',
+      'then printf mariadb;',
+      'elif command -v mysqld >/dev/null 2>&1;',
+      'then if mysqld --version 2>/dev/null | grep -qi mariadb; then printf mariadb; else printf mysql; fi;',
+      'else printf none; fi',
+    ].join(' '),
+    { silent: true }
+  );
+  const engine = result.ok ? result.output.trim() : 'none';
+  return engine === 'mysql' || engine === 'mariadb' ? engine : null;
+}
+
+/** Kredensial panel wajib bisa membuat user/database, bukan cuma SELECT 1. */
+function testAdminCredentials(dbUser, password) {
+  if (!isValidName(dbUser)) return { ok: false, errorMessage: 'Nama user admin database tidak valid.' };
+
+  const env = { ...process.env };
+  if (password) env.MYSQL_PWD = password;
+  const result = shell.runArgs(
+    'mysql',
+    ['-h', '127.0.0.1', '-P', '3306', '-u', dbUser, '-N', '-e', 'SHOW GRANTS FOR CURRENT_USER;', 'mysql'],
+    { silent: true, env }
+  );
+  if (!result.ok) return { ok: false, errorMessage: interpretMysqlError(result.errorMessage) };
+  const grants = result.output || '';
+  const hasGlobalAdmin = /GRANT ALL PRIVILEGES ON \*\.\*/i.test(grants);
+  const hasGrantOption = /WITH GRANT OPTION/i.test(grants);
+  if (!hasGlobalAdmin || !hasGrantOption) {
+    return {
+      ok: false,
+      errorMessage:
+        `User "${dbUser}" bisa login, tapi tidak punya ALL PRIVILEGES ON *.* WITH GRANT OPTION yang dibutuhkan Database Manager.`,
+    };
+  }
+  return { ok: true };
+}
+
 /**
  * Install (kalau belum ada) + amankan MariaDB, sinkron root credential ke
  * config.json. SEBELUMNYA logic ini cuma pernah ada sebagai rangkaian raw
@@ -553,6 +594,68 @@ function setupRootDatabase() {
     }
     // Config ada tapi udah gak valid (server ke-purge/rusak belakangan) -
     // lanjut install/secure ulang di bawah, JANGAN return di sini.
+  }
+
+  const detectedEngine = detectDatabaseEngine();
+
+  // MySQL existing harus dipertahankan. Memasang mariadb-server di atasnya
+  // berpotensi konflik package dan merusak database aplikasi yang sudah ada.
+  // Installer hanya menyalakan service, memverifikasi kredensial admin yang
+  // SUDAH diberikan operator, lalu menyimpannya ke config. Tidak ada ALTER
+  // USER, reset password, CREATE USER, atau migrasi engine di cabang ini.
+  if (detectedEngine === 'mysql') {
+    const startResult = shell.run(
+      [
+        'sudo systemctl enable --now mysql >/dev/null 2>&1',
+        'systemctl is-active --quiet mysql && echo HAS_DB_SERVER || echo NO_DB_SERVER',
+      ].join(' && ')
+    );
+    if (!startResult.ok || !startResult.output.includes('HAS_DB_SERVER')) {
+      return {
+        ok: false,
+        errorMessage: `MySQL existing terdeteksi, tapi servicenya gagal dijalankan: ${startResult.errorMessage || startResult.output}`,
+      };
+    }
+
+    // Config lama bisa saja benar tetapi pengecekan awal gagal hanya karena
+    // service saat itu mati. Coba ulang setelah servicenya dinyalakan.
+    if (cfg.db_root_user && cfg.db_root_password) {
+      const retryLiveCheck = testCredentials('mysql', cfg.db_root_user, cfg.db_root_password);
+      if (retryLiveCheck.ok) {
+        return {
+          ok: true,
+          message: `MySQL existing dipakai (user "${cfg.db_root_user}"); service dinyalakan dan kredensial config tetap dipertahankan.`,
+        };
+      }
+    }
+
+    if (process.env.BOOTSTRAP_DB_CREDENTIALS_PROVIDED !== '1') {
+      return {
+        ok: false,
+        errorMessage:
+          'MySQL existing terdeteksi dan tidak akan ditimpa MariaDB. Jalankan installer lagi dengan ' +
+          'INSTALL_DB_USER dan INSTALL_DB_PASSWORD milik user admin MySQL yang sudah ada.',
+      };
+    }
+
+    const dbUser = process.env.BOOTSTRAP_DB_USER || '';
+    const dbPassword = process.env.BOOTSTRAP_DB_PASSWORD || '';
+    const adminCheck = testAdminCredentials(dbUser, dbPassword);
+    if (!adminCheck.ok) {
+      return {
+        ok: false,
+        errorMessage: `Kredensial admin MySQL existing tidak bisa dipakai: ${adminCheck.errorMessage}`,
+      };
+    }
+
+    config.mutateConfig((current) => Object.assign(current, {
+      db_root_user: dbUser,
+      db_root_password: dbPassword,
+    }));
+    return {
+      ok: true,
+      message: `MySQL existing dipakai (user "${dbUser}") tanpa memasang MariaDB dan tanpa mengubah user/password database.`,
+    };
   }
 
   const installResult = shell.run(

@@ -19,6 +19,10 @@
 #   sudo INSTALL_DOMAIN=api.zenlab.id INSTALL_DEPLOY_USER=catur \
 #     INSTALL_REPO_URL=https://github.com/catur003/vps-manager2.git \
 #     bash scripts/install.sh
+# Kalau server sudah memakai MySQL dengan password admin custom (root socket
+# tidak tersedia), kirim kredensial existing tanpa mengganti passwordnya:
+#   sudo INSTALL_DB_USER=root INSTALL_DB_PASSWORD='password-existing' \
+#     bash scripts/install.sh
 #
 # Aman dijalankan berkali-kali (idempotent) - tiap step ngecek dulu apa
 # udah beres sebelum ngerjain ulang.
@@ -114,13 +118,34 @@ fi
 # --- 3. Install package sistem yang dibutuhin ---
 echo "--- Install package sistem ---"
 export DEBIAN_FRONTEND=noninteractive
-# MySQL dan MariaDB saling konflik di Ubuntu; jangan mulai apt transaction yang pasti gagal.
-if dpkg-query -W -f='${db:Status-Status}\n' 'mysql-server*' 2>/dev/null | grep -qx installed; then
-  echo "ERROR: MySQL sudah terinstall. Installer tidak memasang MariaDB di atas MySQL. Hapus/migrasikan MySQL dulu atau gunakan panel tanpa MariaDB." >&2
-  exit 1
+# MySQL dan MariaDB saling konflik di level apt. Kalau salah satunya sudah
+# ada, pakai engine tersebut; MariaDB hanya dipasang pada server tanpa engine.
+DB_ENGINE=""
+if command -v mariadbd >/dev/null 2>&1 \
+  || (command -v mysqld >/dev/null 2>&1 && mysqld --version 2>/dev/null | grep -qi mariadb); then
+  DB_ENGINE="mariadb"
+elif command -v mysqld >/dev/null 2>&1; then
+  DB_ENGINE="mysql"
 fi
-if ! dpkg-query -W -f='${db:Status-Status}' mariadb-server 2>/dev/null | grep -qx installed \
-  && command -v ss >/dev/null 2>&1 \
+
+DB_CREDENTIALS_PROVIDED=0
+DB_BOOTSTRAP_USER="${INSTALL_DB_USER:-}"
+DB_BOOTSTRAP_PASSWORD="${INSTALL_DB_PASSWORD:-}"
+if [ "${INSTALL_DB_USER+x}" = x ] || [ "${INSTALL_DB_PASSWORD+x}" = x ]; then
+  if [ "${INSTALL_DB_USER+x}" != x ] || [ "${INSTALL_DB_PASSWORD+x}" != x ] || [ -z "$DB_BOOTSTRAP_USER" ]; then
+    echo "ERROR: INSTALL_DB_USER dan INSTALL_DB_PASSWORD wajib diberikan berpasangan (user tidak boleh kosong)." >&2
+    exit 1
+  fi
+  DB_CREDENTIALS_PROVIDED=1
+fi
+
+DATABASE_PACKAGES=(mariadb-server mariadb-client)
+if [ "$DB_ENGINE" = "mysql" ]; then
+  echo "MySQL existing terdeteksi - MariaDB dilewati; database existing akan dipakai tanpa migrasi engine."
+  DATABASE_PACKAGES=()
+elif [ "$DB_ENGINE" = "mariadb" ]; then
+  echo "MariaDB existing terdeteksi - paket database akan diverifikasi tanpa mengganti engine."
+elif command -v ss >/dev/null 2>&1 \
   && ss -H -ltn 'sport = :3306' 2>/dev/null | grep -q .; then
   echo "ERROR: Port 3306 sudah dipakai service/container lain. MariaDB tidak dipasang agar tidak bentrok. Stop atau migrasikan pemakai port 3306 dulu." >&2
   exit 1
@@ -130,7 +155,7 @@ apt-get install -y \
   git curl ca-certificates gnupg \
   openssl \
   nginx certbot \
-  mariadb-server mariadb-client \
+  "${DATABASE_PACKAGES[@]}" \
   fail2ban \
   ufw \
   build-essential
@@ -246,12 +271,28 @@ sudo -u "$DEPLOY_USER" bash -c "cd '$REPO_PATH' && npm install"
 
 # Database disiapkan saat installer masih root. Bootstrap/API setelah ini
 # berjalan sebagai deploy user dan tidak perlu sudo mysql/systemctl yang luas.
-echo "--- Setup MariaDB dan konfigurasi awal ---"
+echo "--- Setup database dan konfigurasi awal ---"
 if [ -f "$REPO_PATH/data/config.json" ]; then
   PRESERVE_PLATFORM_CONFIG=1
 else
   PRESERVE_PLATFORM_CONFIG=0
 fi
+
+# Fresh install di atas MySQL existing perlu kredensial admin yang SUDAH
+# ada. Baca password tanpa echo; installer hanya memverifikasi dan menyimpan,
+# tidak mereset root atau membuat akun berprivilege baru secara diam-diam.
+if [ "$DB_ENGINE" = "mysql" ] && [ "$PRESERVE_PLATFORM_CONFIG" -eq 0 ] && [ "$DB_CREDENTIALS_PROVIDED" -eq 0 ]; then
+  if [ ! -t 0 ]; then
+    echo "ERROR: MySQL existing butuh INSTALL_DB_USER dan INSTALL_DB_PASSWORD pada instalasi non-interaktif." >&2
+    exit 1
+  fi
+  read -rp "User admin MySQL existing [root]: " DB_BOOTSTRAP_USER
+  DB_BOOTSTRAP_USER="${DB_BOOTSTRAP_USER:-root}"
+  read -rsp "Password user admin MySQL existing: " DB_BOOTSTRAP_PASSWORD
+  echo
+  DB_CREDENTIALS_PROVIDED=1
+fi
+
 BOOTSTRAP_DEPLOY_USER="$DEPLOY_USER" \
 BOOTSTRAP_APPS_DIR="$APPS_DIR" \
 BOOTSTRAP_DOCKER_DIR="$DOCKER_DIR" \
@@ -260,6 +301,9 @@ BOOTSTRAP_NGINX_BINARY="$NGINX_BINARY" \
 BOOTSTRAP_NGINX_CONF_DIR="$NGINX_CONF_DIR" \
 BOOTSTRAP_NGINX_LOG_DIR="$NGINX_LOG_DIR" \
 BOOTSTRAP_PRESERVE_PLATFORM_CONFIG="$PRESERVE_PLATFORM_CONFIG" \
+BOOTSTRAP_DB_CREDENTIALS_PROVIDED="$DB_CREDENTIALS_PROVIDED" \
+BOOTSTRAP_DB_USER="$DB_BOOTSTRAP_USER" \
+BOOTSTRAP_DB_PASSWORD="$DB_BOOTSTRAP_PASSWORD" \
 node "$REPO_PATH/bin/vps-database-bootstrap.js"
 chown -R "$DEPLOY_USER:$DEPLOY_USER" "$REPO_PATH"
 

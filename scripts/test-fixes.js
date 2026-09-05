@@ -804,6 +804,90 @@ async function main() {
   }
 
   // ---------------------------------------------------------------
+  section('Installer database - pertahankan MySQL existing');
+  // ---------------------------------------------------------------
+  {
+    const database = require(path.join(ROOT, 'src/database/database'));
+    const shellModule = require(path.join(ROOT, 'src/utils/shell'));
+    const configModule = require(path.join(ROOT, 'src/config/config'));
+    const originalRun = shellModule.run;
+    const originalRunArgs = shellModule.runArgs;
+    const originalLoadConfig = configModule.loadConfig;
+    const originalMutateConfig = configModule.mutateConfig;
+    const originalEnv = {
+      provided: process.env.BOOTSTRAP_DB_CREDENTIALS_PROVIDED,
+      user: process.env.BOOTSTRAP_DB_USER,
+      password: process.env.BOOTSTRAP_DB_PASSWORD,
+    };
+    const commands = [];
+    let savedConfig = null;
+
+    try {
+      configModule.loadConfig = () => ({ db_root_user: 'root', db_root_password: '' });
+      configModule.mutateConfig = (mutator) => {
+        const current = {};
+        mutator(current);
+        savedConfig = current;
+      };
+      shellModule.run = (command) => {
+        commands.push(command);
+        if (command.includes('command -v mariadbd')) return { ok: true, output: 'mysql' };
+        if (command.includes('systemctl enable --now mysql')) return { ok: true, output: 'HAS_DB_SERVER' };
+        return { ok: false, output: '', errorMessage: 'command tidak diharapkan oleh self-test' };
+      };
+      shellModule.runArgs = (file, args) => {
+        commands.push([file, ...args].join(' '));
+        if (args.includes('SHOW GRANTS FOR CURRENT_USER;')) {
+          return { ok: true, output: 'GRANT ALL PRIVILEGES ON *.* TO admin@localhost WITH GRANT OPTION' };
+        }
+        return { ok: false, output: '', errorMessage: 'query tidak diharapkan oleh self-test' };
+      };
+      process.env.BOOTSTRAP_DB_CREDENTIALS_PROVIDED = '1';
+      process.env.BOOTSTRAP_DB_USER = 'existing_admin';
+      process.env.BOOTSTRAP_DB_PASSWORD = 'existing-secret';
+
+      const result = database.setupRootDatabase();
+      const destructiveCommand = commands.some((command) =>
+        /apt-get install -y mariadb|ALTER USER|CREATE USER|GRANT ALL PRIVILEGES ON \*\.\*/i.test(command)
+      );
+      if (
+        result.ok
+        && savedConfig?.db_root_user === 'existing_admin'
+        && savedConfig?.db_root_password === 'existing-secret'
+        && !destructiveCommand
+      ) {
+        ok('MySQL existing dipakai dengan kredensial terverifikasi; MariaDB tidak dipasang dan akun DB tidak diubah');
+      } else {
+        fail('Cabang MySQL existing tidak aman/benar', JSON.stringify({ result, savedConfig, commands }));
+      }
+
+      commands.length = 0;
+      savedConfig = null;
+      delete process.env.BOOTSTRAP_DB_CREDENTIALS_PROVIDED;
+      delete process.env.BOOTSTRAP_DB_USER;
+      delete process.env.BOOTSTRAP_DB_PASSWORD;
+      const missingCredentials = database.setupRootDatabase();
+      const attemptedMariaDbInstall = commands.some((command) => /apt-get install -y mariadb/i.test(command));
+      if (!missingCredentials.ok && /INSTALL_DB_USER/.test(missingCredentials.errorMessage) && !attemptedMariaDbInstall) {
+        ok('MySQL existing tanpa kredensial berhenti dengan instruksi jelas, tanpa fallback memasang MariaDB');
+      } else {
+        fail('MySQL existing tanpa kredensial tidak ditangani dengan aman', JSON.stringify({ missingCredentials, commands }));
+      }
+    } finally {
+      shellModule.run = originalRun;
+      shellModule.runArgs = originalRunArgs;
+      configModule.loadConfig = originalLoadConfig;
+      configModule.mutateConfig = originalMutateConfig;
+      if (originalEnv.provided === undefined) delete process.env.BOOTSTRAP_DB_CREDENTIALS_PROVIDED;
+      else process.env.BOOTSTRAP_DB_CREDENTIALS_PROVIDED = originalEnv.provided;
+      if (originalEnv.user === undefined) delete process.env.BOOTSTRAP_DB_USER;
+      else process.env.BOOTSTRAP_DB_USER = originalEnv.user;
+      if (originalEnv.password === undefined) delete process.env.BOOTSTRAP_DB_PASSWORD;
+      else process.env.BOOTSTRAP_DB_PASSWORD = originalEnv.password;
+    }
+  }
+
+  // ---------------------------------------------------------------
   console.log('\n=======================================');
   console.log(`Hasil: ${passed} passed, ${failed} failed`);
   console.log('=======================================');

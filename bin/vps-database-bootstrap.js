@@ -23,7 +23,7 @@ if (!preservePlatformConfig) {
 
 const result = database.setupRootDatabase();
 if (!result.ok) {
-  console.error(result.errorMessage || 'Setup MariaDB gagal.');
+  console.error(result.errorMessage || 'Setup database gagal.');
   process.exit(1);
 }
 
