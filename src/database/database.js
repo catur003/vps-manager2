@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const fs = require('fs');
 const shell = require('../utils/shell');
 const config = require('../config/config');
 
@@ -453,10 +454,21 @@ function resetPassword(dbName, dbUser, customPassword) {
  * nulis config.json dengan password yang gak match kenyataan).
  */
 function changeRootPassword(newPassword) {
-  const { user } = mysqlCreds();
   if (!newPassword || typeof newPassword !== 'string' || newPassword.trim() === '') {
     return { ok: false, errorMessage: 'Password baru wajib diisi.' };
   }
+  // Jangan mengasumsikan akun selalu tersedia pada localhost DAN 127.0.0.1.
+  // CURRENT_USER() memberi account row yang benar-benar dipakai koneksi TCP
+  // ini; ubah hanya row tersebut agar salah satu ALTER tidak gagal di tengah.
+  const accountResult = runSQL('SELECT CURRENT_USER();', { skipHeader: true });
+  if (!accountResult.ok) return { ok: false, errorMessage: accountResult.errorMessage };
+  const account = accountResult.output.trim().split('\n')[0] || '';
+  const separator = account.lastIndexOf('@');
+  if (separator <= 0 || separator === account.length - 1) {
+    return { ok: false, errorMessage: `Format CURRENT_USER() tidak dikenali: ${account}` };
+  }
+  const accountUser = escapeSqlString(account.slice(0, separator));
+  const accountHost = escapeSqlString(account.slice(separator + 1));
   const escapedPassword = escapeSqlString(newPassword);
   // FIXED: sebelumnya `IDENTIFIED VIA mysql_native_password USING
   // PASSWORD('...')` - syntax KHUSUS MariaDB. Di MySQL 8 (yang menurut
@@ -466,7 +478,7 @@ function changeRootPassword(newPassword) {
   // dihapus - jadi versi lama rusak di KEDUA arah. Plain `IDENTIFIED BY`
   // didukung universal (MySQL 8 & semua MariaDB) - sama seperti yang sudah
   // dipakai setupRootDatabase()/createDatabase()/resetPassword().
-  const sql = `ALTER USER '${user}'@'localhost' IDENTIFIED BY '${escapedPassword}'; FLUSH PRIVILEGES;`;
+  const sql = `ALTER USER '${accountUser}'@'${accountHost}' IDENTIFIED BY '${escapedPassword}'; FLUSH PRIVILEGES;`;
   const result = runSQL(sql);
   if (!result.ok) return { ok: false, errorMessage: result.errorMessage };
   return { ok: true };
@@ -525,7 +537,9 @@ function testCredentials(dbName, dbUser, password) {
 function detectDatabaseEngine() {
   const result = shell.run(
     [
-      'if command -v mariadbd >/dev/null 2>&1;',
+      'if command -v mariadbd >/dev/null 2>&1 && command -v mysqld >/dev/null 2>&1 && ! mysqld --version 2>/dev/null | grep -qi mariadb;',
+      'then printf conflict;',
+      'elif command -v mariadbd >/dev/null 2>&1;',
       'then printf mariadb;',
       'elif command -v mysqld >/dev/null 2>&1;',
       'then if mysqld --version 2>/dev/null | grep -qi mariadb; then printf mariadb; else printf mysql; fi;',
@@ -534,7 +548,7 @@ function detectDatabaseEngine() {
     { silent: true }
   );
   const engine = result.ok ? result.output.trim() : 'none';
-  return engine === 'mysql' || engine === 'mariadb' ? engine : null;
+  return engine === 'mysql' || engine === 'mariadb' || engine === 'conflict' ? engine : null;
 }
 
 /** Kredensial panel wajib bisa membuat user/database, bukan cuma SELECT 1. */
@@ -554,7 +568,7 @@ function testAdminCredentials(dbUser, password) {
     'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'DROP', 'REFERENCES',
     'INDEX', 'ALTER', 'CREATE TEMPORARY TABLES', 'LOCK TABLES', 'EXECUTE',
     'CREATE VIEW', 'SHOW VIEW', 'CREATE ROUTINE', 'ALTER ROUTINE',
-    'CREATE USER', 'EVENT', 'TRIGGER',
+    'CREATE USER', 'EVENT', 'TRIGGER', 'SHOW DATABASES',
   ];
   const grantedPrivileges = new Set();
   let hasAllPrivileges = false;
@@ -587,152 +601,153 @@ function testAdminCredentials(dbUser, password) {
   return { ok: true };
 }
 
-/**
- * Install (kalau belum ada) + amankan MariaDB, sinkron root credential ke
- * config.json. SEBELUMNYA logic ini cuma pernah ada sebagai rangkaian raw
- * SSH command di installFlow.ts (mobile) - gak bisa dipakai ulang dari CLI
- * maupun dari installer backend baru (bin/vps-bootstrap.js). Diextract ke
- * sini jadi SATU sumber kebenaran: fix apapun ke depan (syntax SQL, live
- * verification, dll) otomatis kepakai dari SEMUA jalur pemanggilan.
- *
- * Idempotent + self-healing (FIXED, laporan Zen): kalau config.json udah
- * punya db_root_password TAPI server-nya udah gak nyambung pakai kredensial
- * itu (server di-purge/rusak belakangan), TETAP lanjut install/secure ulang
- * - bukan asal skip cuma karena config-nya "kelihatan" udah pernah diisi.
- *
- * Pakai plain `IDENTIFIED BY` (BUKAN `IDENTIFIED WITH mysql_native_password
- * BY`) - lihat catatan di escapeSqlString soal kenapa: syntax WITH...BY itu
- * khusus MySQL 8.0, MariaDB (yang paling umum kepasang di server Ubuntu
- * lewat `apt install mariadb-server`, dan bahkan sering "menyamar" jadi
- * `mysql-server` juga) nolak dengan syntax error.
- */
-function setupRootDatabase() {
+function configuredAdminCredentials() {
   const cfg = config.loadConfig();
-
-  if (cfg.db_root_user && cfg.db_root_password) {
-    const liveCheck = testCredentials('mysql', cfg.db_root_user, cfg.db_root_password);
-    if (liveCheck.ok) {
-      return {
-        ok: true,
-        message: `Database udah pernah di-setup sebelumnya (user "${cfg.db_root_user}") dan masih bisa dikonek - dilewatin, gak diulang.`,
-      };
-    }
-    // Config ada tapi udah gak valid (server ke-purge/rusak belakangan) -
-    // lanjut install/secure ulang di bawah, JANGAN return di sini.
+  if (!cfg.db_root_user || !cfg.db_root_password) {
+    return { ok: false, needsCredentials: true, errorMessage: 'Kredensial admin database belum tersimpan.' };
   }
+  const result = testAdminCredentials(cfg.db_root_user, cfg.db_root_password);
+  return result.ok
+    ? { ok: true, user: cfg.db_root_user }
+    : { ok: false, needsCredentials: true, errorMessage: result.errorMessage };
+}
 
-  const detectedEngine = detectDatabaseEngine();
-
-  // MySQL existing harus dipertahankan. Memasang mariadb-server di atasnya
-  // berpotensi konflik package dan merusak database aplikasi yang sudah ada.
-  // Installer hanya menyalakan service, memverifikasi kredensial admin yang
-  // SUDAH diberikan operator, lalu menyimpannya ke config. Tidak ada ALTER
-  // USER, reset password, CREATE USER, atau migrasi engine di cabang ini.
-  if (detectedEngine === 'mysql') {
-    const startResult = shell.run(
-      [
-        'sudo systemctl enable --now mysql >/dev/null 2>&1',
-        'systemctl is-active --quiet mysql && echo HAS_DB_SERVER || echo NO_DB_SERVER',
-      ].join(' && ')
-    );
-    if (!startResult.ok || !startResult.output.includes('HAS_DB_SERVER')) {
-      return {
-        ok: false,
-        errorMessage: `MySQL existing terdeteksi, tapi servicenya gagal dijalankan: ${startResult.errorMessage || startResult.output}`,
-      };
-    }
-
-    // Config lama bisa saja benar tetapi pengecekan awal gagal hanya karena
-    // service saat itu mati. Coba ulang setelah servicenya dinyalakan.
-    if (cfg.db_root_user && cfg.db_root_password) {
-      const retryLiveCheck = testCredentials('mysql', cfg.db_root_user, cfg.db_root_password);
-      if (retryLiveCheck.ok) {
-        return {
-          ok: true,
-          message: `MySQL existing dipakai (user "${cfg.db_root_user}"); service dinyalakan dan kredensial config tetap dipertahankan.`,
-        };
-      }
-    }
-
-    if (process.env.BOOTSTRAP_DB_CREDENTIALS_PROVIDED !== '1') {
-      return {
-        ok: false,
-        errorMessage:
-          'MySQL existing terdeteksi dan tidak akan ditimpa MariaDB. Jalankan installer lagi dengan ' +
-          'INSTALL_DB_USER dan INSTALL_DB_PASSWORD milik user admin MySQL yang sudah ada.',
-      };
-    }
-
-    const dbUser = process.env.BOOTSTRAP_DB_USER || '';
-    const dbPassword = process.env.BOOTSTRAP_DB_PASSWORD || '';
-    const adminCheck = testAdminCredentials(dbUser, dbPassword);
-    if (!adminCheck.ok) {
-      return {
-        ok: false,
-        errorMessage: `Kredensial admin MySQL existing tidak bisa dipakai: ${adminCheck.errorMessage}`,
-      };
-    }
-
-    config.mutateConfig((current) => Object.assign(current, {
-      db_root_user: dbUser,
-      db_root_password: dbPassword,
-    }));
-    return {
-      ok: true,
-      message: `MySQL existing dipakai (user "${dbUser}") tanpa memasang MariaDB dan tanpa mengubah user/password database.`,
-    };
-  }
-
-  const installResult = shell.run(
+function startDatabaseService(engine) {
+  const service = engine === 'mariadb' ? 'mariadb' : engine === 'mysql' ? 'mysql' : '';
+  if (!service) return { ok: false, errorMessage: 'Engine database host tidak dikenali.' };
+  const result = shell.run(
     [
-      // FIXED: sebelumnya `sudo apt-get update -y` - flag -y di `update`
-      // sebenarnya no-op, TAPI rule sudoers (scripts/setup-sudoers.sh)
-      // nge-whitelist persis `apt-get update` TANPA argumen tambahan, jadi
-      // pas fungsi ini dipanggil sebagai deploy_user (bukan root) command-nya
-      // ditolak sudo ("not allowed to execute") dan self-heal path gagal di
-      // langkah pertama. Tanpa -y, command match rule sudoers apa adanya.
-      'sudo apt-get update >/dev/null 2>&1',
-      'sudo apt-get install -y mariadb-server >/dev/null 2>&1',
-      'sudo systemctl enable --now mariadb >/dev/null 2>&1',
-      // FIXED: check sukses/gagal SEBELUMNYA (`command -v mysql`) ngecek
-      // CLIENT command doang, yang bisa udah ada dari paket lain SEBELUM
-      // baris ini sempat jalan - false-positive "server ada" padahal cuma
-      // client. `systemctl is-active` cuma true kalau SERVICE beneran nyala.
-      'systemctl is-active --quiet mariadb && echo HAS_DB_SERVER || echo NO_DB_SERVER',
-    ].join(' && ')
+      `sudo systemctl enable --now ${service} >/dev/null 2>&1`,
+      `systemctl is-active --quiet ${service} && echo HAS_DB_SERVER || echo NO_DB_SERVER`,
+    ].join(' && '),
+    { silent: true }
   );
-  if (!installResult.ok || !installResult.output.includes('HAS_DB_SERVER')) {
-    return { ok: false, errorMessage: `Gagal install MariaDB server: ${installResult.errorMessage || installResult.output}` };
-  }
+  return result.ok && result.output.includes('HAS_DB_SERVER')
+    ? { ok: true }
+    : { ok: false, errorMessage: `Service ${service} gagal dijalankan: ${result.errorMessage || result.output}` };
+}
 
-  const socketCheck = shell.run('sudo mysql -e "SELECT 1;" >/dev/null 2>&1 && echo SOCKET_OK || echo SOCKET_FAIL', { silent: true });
-  if (!socketCheck.output.includes('SOCKET_OK')) {
+function loadFreshDatabaseCredentials(statePath) {
+  if (!statePath) {
+    return { ok: false, errorMessage: 'State recovery fresh database tidak diberikan installer.' };
+  }
+  try {
+    const existing = fs.readFileSync(statePath, 'utf8').trim();
+    if (existing) {
+      const parsed = JSON.parse(existing);
+      if (isValidName(parsed.user) && typeof parsed.password === 'string' && parsed.password.length >= 20) {
+        return { ok: true, user: parsed.user, password: parsed.password };
+      }
+      return { ok: false, errorMessage: 'State recovery fresh database tidak valid; installer berhenti agar tidak mengubah akun yang salah.' };
+    }
+
+    const credentials = {
+      user: 'vpsmanager_admin',
+      password: generatePassword(32),
+    };
+    const tmpPath = `${statePath}.${process.pid}.tmp`;
+    fs.writeFileSync(tmpPath, JSON.stringify(credentials), { mode: 0o600 });
+    fs.chmodSync(tmpPath, 0o600);
+    fs.renameSync(tmpPath, statePath);
+    return { ok: true, ...credentials };
+  } catch (err) {
+    return { ok: false, errorMessage: `Gagal membaca/menulis state recovery database: ${err.message}` };
+  }
+}
+
+/**
+ * Setup database dengan mode eksplisit dari installer:
+ * - existing: tidak pernah install engine, ALTER root, CREATE USER, atau DROP.
+ * - fresh-mariadb: hanya untuk MariaDB yang dipasang oleh installer ini dan
+ *   ditandai recovery-state root-owned. Root socket tetap dipertahankan;
+ *   panel mendapat akun lokal sendiri.
+ */
+function setupRootDatabase(options = {}) {
+  const mode = options.mode || process.env.BOOTSTRAP_DB_MODE || 'existing';
+  const statePath = options.statePath || process.env.BOOTSTRAP_DB_STATE_PATH || '';
+  const detectedEngine = detectDatabaseEngine();
+  if (!detectedEngine) {
+    return { ok: false, errorMessage: 'Server MySQL/MariaDB tidak terdeteksi setelah tahap instalasi package.' };
+  }
+  if (detectedEngine === 'conflict') {
     return {
       ok: false,
-      errorMessage:
-        'MariaDB terinstall & jalan, tapi root udah punya auth/password custom dari sebelumnya (kemungkinan pernah di-setup manual) - ' +
-        'gak bisa ditebak otomatis. Isi manual db_root_user/db_root_password lewat Configuration kalau tau kredensial lamanya, ' +
-        'atau reset manual: sudo mysql_secure_installation.',
+      errorMessage: 'Binary MariaDB dan MySQL Oracle terdeteksi bersamaan; setup berhenti tanpa mengubah database.',
+    };
+  }
+  if (mode === 'fresh-mariadb' && detectedEngine !== 'mariadb') {
+    return {
+      ok: false,
+      errorMessage: `State installer mengharapkan fresh MariaDB, tapi engine yang terdeteksi adalah ${detectedEngine}. Tidak ada perubahan database yang dilakukan.`,
     };
   }
 
-  const password = generatePassword(32);
-  const escapedPassword = escapeSqlString(password);
-  const secureSql = [
-    `ALTER USER 'root'@'localhost' IDENTIFIED BY '${escapedPassword}';`,
-    `CREATE USER IF NOT EXISTS 'root'@'127.0.0.1' IDENTIFIED BY '${escapedPassword}';`,
-    `GRANT ALL PRIVILEGES ON *.* TO 'root'@'127.0.0.1' WITH GRANT OPTION;`,
-    `DELETE FROM mysql.user WHERE User='';`,
-    `DROP DATABASE IF EXISTS test;`,
-    `FLUSH PRIVILEGES;`,
-  ].join(' ');
-  const secureResult = shell.run(`sudo mysql -e "${secureSql.replace(/"/g, '\\"')}"`, { silent: true });
-  if (!secureResult.ok) {
-    return { ok: false, errorMessage: `MariaDB terinstall tapi gagal di-secure: ${secureResult.errorMessage}` };
+  const serviceResult = startDatabaseService(detectedEngine);
+  if (!serviceResult.ok) return serviceResult;
+
+  // Kredensial eksplisit selalu menang atas config lama, tetapi baru disimpan
+  // setelah benar-benar lolos validasi admin.
+  if (mode !== 'fresh-mariadb' && process.env.BOOTSTRAP_DB_CREDENTIALS_PROVIDED === '1') {
+    const dbUser = process.env.BOOTSTRAP_DB_USER || '';
+    const dbPassword = process.env.BOOTSTRAP_DB_PASSWORD || '';
+    if (!dbPassword) {
+      return { ok: false, needsCredentials: true, errorMessage: 'Password admin database tidak boleh kosong.' };
+    }
+    const adminCheck = testAdminCredentials(dbUser, dbPassword);
+    if (!adminCheck.ok) {
+      return { ok: false, needsCredentials: true, errorMessage: `Kredensial admin database tidak bisa dipakai: ${adminCheck.errorMessage}` };
+    }
+    config.mutateConfig((current) => Object.assign(current, { db_root_user: dbUser, db_root_password: dbPassword }));
+    return {
+      ok: true,
+      message: `${detectedEngine === 'mysql' ? 'MySQL' : 'MariaDB'} existing dipakai dengan user "${dbUser}"; akun dan database server tidak diubah.`,
+    };
   }
 
-  config.mutateConfig((current) => Object.assign(current, { db_root_user: 'root', db_root_password: password }));
-  return { ok: true, message: 'MariaDB terinstall, diamankan (anonymous user & database test dibuang), root password digenerate & disinkron ke config.' };
+  const storedCheck = configuredAdminCredentials();
+  if (storedCheck.ok) {
+    return {
+      ok: true,
+      message: `Database existing tervalidasi dengan user "${storedCheck.user}"; setup database dilewati.`,
+    };
+  }
+
+  if (mode !== 'fresh-mariadb') {
+    return {
+      ok: false,
+      needsCredentials: true,
+      errorMessage:
+        `Database ${detectedEngine} existing tidak akan diubah. Berikan user admin TCP yang sudah ada beserta passwordnya.`,
+    };
+  }
+
+  const recovery = loadFreshDatabaseCredentials(statePath);
+  if (!recovery.ok) return recovery;
+  const escapedUser = escapeSqlString(recovery.user);
+  const escapedPassword = escapeSqlString(recovery.password);
+  const secureSql = [
+    `CREATE USER IF NOT EXISTS '${escapedUser}'@'127.0.0.1' IDENTIFIED BY '${escapedPassword}';`,
+    `ALTER USER '${escapedUser}'@'127.0.0.1' IDENTIFIED BY '${escapedPassword}';`,
+    `GRANT ALL PRIVILEGES ON *.* TO '${escapedUser}'@'127.0.0.1' WITH GRANT OPTION;`,
+    `FLUSH PRIVILEGES;`,
+  ].join(' ');
+  const secureResult = shell.runArgs('sudo', ['mysql', '-e', secureSql], { silent: true });
+  if (!secureResult.ok) {
+    return { ok: false, errorMessage: `Fresh MariaDB terpasang, tapi akun panel gagal dibuat: ${secureResult.errorMessage}` };
+  }
+  const liveCheck = testAdminCredentials(recovery.user, recovery.password);
+  if (!liveCheck.ok) {
+    return { ok: false, errorMessage: `Akun panel dibuat tetapi verifikasi TCP gagal: ${liveCheck.errorMessage}` };
+  }
+
+  config.mutateConfig((current) => Object.assign(current, {
+    db_root_user: recovery.user,
+    db_root_password: recovery.password,
+  }));
+  return {
+    ok: true,
+    message: `Fresh MariaDB siap dengan akun lokal "${recovery.user}"; autentikasi root tidak diubah.`,
+  };
 }
 
 module.exports = {
@@ -761,5 +776,7 @@ module.exports = {
   // udah dipakai internal di file ini, jadi gak bisa dipanggil dari luar.
   runSQL,
   escapeSqlString,
+  testAdminCredentials,
+  configuredAdminCredentials,
   setupRootDatabase,
 };

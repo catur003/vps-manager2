@@ -36,7 +36,7 @@ git clone https://github.com/catur003/vps-manager2.git
 cd vps-manager2
 sudo bash setup-otomatis.sh
 ```
-Installer menyiapkan dependency, folder kerja, sudoers, MariaDB, setup token admin, PM2, firewall, dan Nginx/SSL secara otomatis. Web memakai username/password + session cookie; API key bernama untuk mobile/bot/script dibuat dari menu **API Keys** setelah login. Aksi yang mengubah data lama secara permanen (drop database, hapus project, dll) wajib `{ "confirm": true }`. Semua request tercatat di `data/audit.log` dengan field sensitif di-redact.
+Installer menyiapkan dependency, folder kerja, sudoers, database, setup token admin, PM2, firewall, dan Nginx/SSL secara otomatis. MySQL/MariaDB existing dipakai tanpa mengganti engine atau mengubah root; MariaDB hanya dipasang pada server yang belum punya engine database. Web memakai username/password + session cookie; API key bernama untuk mobile/bot/script dibuat dari menu **API Keys** setelah login. Aksi yang mengubah data lama secara permanen (drop database, hapus project, dll) wajib `{ "confirm": true }`. Semua request tercatat di `data/audit.log` dengan field sensitif di-redact.
 
 ## Keamanan
 

@@ -541,12 +541,40 @@ async function configEditCategoryMenu() {
       { type: 'input', name: 'db_root_user', message: 'Database root user:', default: cfg.db_root_user },
       { type: 'confirm', name: 'changePassword', message: 'Ganti password juga?', default: false },
     ]);
+    const dbUserChanged = db_root_user !== cfg.db_root_user;
     let db_root_password = cfg.db_root_password;
-    if (changePassword) {
+    if (changePassword || dbUserChanged) {
       const { password } = await inquirer.prompt([
-        { type: 'password', name: 'password', mask: '*', message: 'Password baru:' },
+        {
+          type: 'password',
+          name: 'password',
+          mask: '*',
+          message: dbUserChanged ? 'Password akun admin tersebut:' : 'Password baru:',
+        },
       ]);
       db_root_password = password;
+    }
+
+    if (dbUserChanged) {
+      const credentialCheck = database.testAdminCredentials(db_root_user, db_root_password);
+      if (!credentialCheck.ok) {
+        logger.error(`Kredensial admin baru tidak valid; Configuration tidak diubah: ${credentialCheck.errorMessage}`);
+        await afterAction(configurationMenu);
+        return;
+      }
+    } else if (changePassword) {
+      const passwordResult = database.changeRootPassword(db_root_password);
+      if (!passwordResult.ok) {
+        logger.error(`Password database gagal diubah; Configuration tidak diubah: ${passwordResult.errorMessage}`);
+        await afterAction(configurationMenu);
+        return;
+      }
+      const verifyResult = database.testCredentials('mysql', db_root_user, db_root_password);
+      if (!verifyResult.ok) {
+        logger.error(`Password server berubah tetapi verifikasi gagal; Configuration tidak diubah: ${verifyResult.errorMessage}`);
+        await afterAction(configurationMenu);
+        return;
+      }
     }
     config.mutateConfig((current) => Object.assign(current, { db_root_user, db_root_password }));
     logger.success('Konfigurasi Database disimpan.');
@@ -1870,16 +1898,10 @@ async function databaseManagerMenu() {
       return;
     }
 
-    // Step 2: ALTER USER - otentikasi masih pakai kredensial LAMA (config
-    // belum berubah sampai titik ini), scope ke localhost DAN 127.0.0.1
-    // sekaligus (sama pola kayak stepSetupDatabase pas instalasi awal),
-    // biar akses lokal & TCP (dipakai semua fitur app) tetap konsisten.
-    const escapedNew = database.escapeSqlString(newPassword);
-    const alterSql =
-      `ALTER USER '${cfg.db_root_user}'@'localhost' IDENTIFIED BY '${escapedNew}'; ` +
-      `ALTER USER '${cfg.db_root_user}'@'127.0.0.1' IDENTIFIED BY '${escapedNew}'; ` +
-      'FLUSH PRIVILEGES;';
-    const alterResult = database.runSQL(alterSql);
+    // Step 2: module database menentukan account row aktual lewat
+    // CURRENT_USER(), jadi akun yang hanya punya host 127.0.0.1 tidak gagal
+    // gara-gara ALTER hardcoded ke localhost.
+    const alterResult = database.changeRootPassword(newPassword);
     if (!alterResult.ok) {
       logger.error(
         `Gagal ganti password: ${alterResult.errorMessage}\n` +

@@ -843,7 +843,7 @@ async function main() {
             output:
               'GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, RELOAD, PROCESS, REFERENCES, INDEX, ALTER, ' +
               'CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, ' +
-              'CREATE USER, EVENT, TRIGGER ON *.* TO `existing_admin`@`127.0.0.1` WITH GRANT OPTION',
+              'CREATE USER, EVENT, TRIGGER, SHOW DATABASES ON *.* TO `existing_admin`@`127.0.0.1` WITH GRANT OPTION',
           };
         }
         return { ok: false, output: '', errorMessage: 'query tidak diharapkan oleh self-test' };
@@ -874,7 +874,7 @@ async function main() {
       delete process.env.BOOTSTRAP_DB_PASSWORD;
       const missingCredentials = database.setupRootDatabase();
       const attemptedMariaDbInstall = commands.some((command) => /apt-get install -y mariadb/i.test(command));
-      if (!missingCredentials.ok && /INSTALL_DB_USER/.test(missingCredentials.errorMessage) && !attemptedMariaDbInstall) {
+      if (!missingCredentials.ok && missingCredentials.needsCredentials === true && !attemptedMariaDbInstall) {
         ok('MySQL existing tanpa kredensial berhenti dengan instruksi jelas, tanpa fallback memasang MariaDB');
       } else {
         fail('MySQL existing tanpa kredensial tidak ditangani dengan aman', JSON.stringify({ missingCredentials, commands }));
@@ -890,6 +890,259 @@ async function main() {
       else process.env.BOOTSTRAP_DB_USER = originalEnv.user;
       if (originalEnv.password === undefined) delete process.env.BOOTSTRAP_DB_PASSWORD;
       else process.env.BOOTSTRAP_DB_PASSWORD = originalEnv.password;
+    }
+  }
+
+  // ---------------------------------------------------------------
+  section('Installer database - fresh/existing/recovery state');
+  // ---------------------------------------------------------------
+  {
+    const database = require(path.join(ROOT, 'src/database/database'));
+    const shellModule = require(path.join(ROOT, 'src/utils/shell'));
+    const configModule = require(path.join(ROOT, 'src/config/config'));
+    const originalRun = shellModule.run;
+    const originalRunArgs = shellModule.runArgs;
+    const originalLoadConfig = configModule.loadConfig;
+    const originalMutateConfig = configModule.mutateConfig;
+    const originalEnv = {
+      provided: process.env.BOOTSTRAP_DB_CREDENTIALS_PROVIDED,
+      user: process.env.BOOTSTRAP_DB_USER,
+      password: process.env.BOOTSTRAP_DB_PASSWORD,
+    };
+    const stateDir = fs.mkdtempSync('/tmp/vpsmanager-db-state-');
+    const statePath = path.join(stateDir, 'database-bootstrap.pending');
+    const commands = [];
+    let savedConfig = null;
+
+    function clearCredentialEnv() {
+      delete process.env.BOOTSTRAP_DB_CREDENTIALS_PROVIDED;
+      delete process.env.BOOTSTRAP_DB_USER;
+      delete process.env.BOOTSTRAP_DB_PASSWORD;
+    }
+
+    try {
+      fs.writeFileSync(statePath, '', { mode: 0o600 });
+      configModule.loadConfig = () => ({ db_root_user: 'root', db_root_password: '' });
+      configModule.mutateConfig = (mutator) => {
+        const current = {};
+        mutator(current);
+        savedConfig = current;
+      };
+      shellModule.run = (command) => {
+        commands.push(command);
+        if (command.includes('command -v mariadbd')) return { ok: true, output: 'mariadb' };
+        if (command.includes('systemctl enable --now mariadb')) return { ok: true, output: 'HAS_DB_SERVER' };
+        return { ok: false, output: '', errorMessage: 'command tidak diharapkan oleh self-test' };
+      };
+      shellModule.runArgs = (file, args) => {
+        commands.push([file, ...args].join(' '));
+        if (file === 'sudo' && args[0] === 'mysql') return { ok: true, output: '' };
+        if (file === 'mysql' && args.includes('SHOW GRANTS FOR CURRENT_USER;')) {
+          return { ok: true, output: 'GRANT ALL PRIVILEGES ON *.* TO admin@127.0.0.1 WITH GRANT OPTION' };
+        }
+        return { ok: false, output: '', errorMessage: 'command tidak diharapkan oleh self-test' };
+      };
+      clearCredentialEnv();
+
+      const freshResult = database.setupRootDatabase({ mode: 'fresh-mariadb', statePath });
+      const sqlCommand = commands.find((command) => command.includes('CREATE USER IF NOT EXISTS')) || '';
+      if (
+        freshResult.ok
+        && savedConfig?.db_root_user === 'vpsmanager_admin'
+        && savedConfig?.db_root_password
+        && sqlCommand.includes("'vpsmanager_admin'@'127.0.0.1'")
+        && !sqlCommand.includes("ALTER USER 'root'")
+        && !/DROP DATABASE|DELETE FROM mysql\.user/i.test(sqlCommand)
+      ) {
+        ok('Fresh MariaDB membuat akun panel recoverable tanpa mengubah autentikasi root');
+      } else {
+        fail('Setup fresh MariaDB tidak aman/idempotent', JSON.stringify({ freshResult, savedConfig, commands }));
+      }
+
+      const recoveryState = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+      const recoveryMode = fs.statSync(statePath).mode & 0o777;
+      if (
+        recoveryState.user === savedConfig?.db_root_user
+        && recoveryState.password === savedConfig?.db_root_password
+        && recoveryMode === 0o600
+      ) {
+        ok('Kredensial fresh disimpan ke recovery state sebelum SQL sehingga crash bisa dilanjutkan');
+      } else {
+        fail('Recovery state fresh database tidak sinkron dengan config');
+      }
+
+      commands.length = 0;
+      savedConfig = null;
+      configModule.loadConfig = () => ({ db_root_user: '', db_root_password: '' });
+      shellModule.run = (command) => {
+        commands.push(command);
+        if (command.includes('command -v mariadbd')) return { ok: true, output: 'mariadb' };
+        if (command.includes('systemctl enable --now mariadb')) return { ok: true, output: 'HAS_DB_SERVER' };
+        return { ok: false, output: '', errorMessage: 'command tidak diharapkan oleh self-test' };
+      };
+      shellModule.runArgs = () => {
+        throw new Error('Existing MariaDB tanpa kredensial tidak boleh menjalankan SQL mutasi.');
+      };
+      const existingMaria = database.setupRootDatabase({ mode: 'existing' });
+      if (!existingMaria.ok && existingMaria.needsCredentials && !commands.some((command) => /CREATE USER|ALTER USER|DROP DATABASE/i.test(command))) {
+        ok('MariaDB existing tanpa kredensial meminta input tanpa menyentuh root/user/database');
+      } else {
+        fail('MariaDB existing masuk jalur mutasi fresh', JSON.stringify({ existingMaria, commands }));
+      }
+
+      commands.length = 0;
+      shellModule.run = (command) => {
+        commands.push(command);
+        if (command.includes('command -v mariadbd')) return { ok: true, output: 'mysql' };
+        return { ok: true, output: 'HAS_DB_SERVER' };
+      };
+      const modeConflict = database.setupRootDatabase({ mode: 'fresh-mariadb', statePath });
+      if (!modeConflict.ok && /mengharapkan fresh MariaDB/.test(modeConflict.errorMessage) && commands.length === 1) {
+        ok('Recovery state MariaDB + engine MySQL dianggap conflict dan berhenti sebelum mutasi');
+      } else {
+        fail('Conflict recovery state/engine tidak fail-closed', JSON.stringify({ modeConflict, commands }));
+      }
+    } finally {
+      shellModule.run = originalRun;
+      shellModule.runArgs = originalRunArgs;
+      configModule.loadConfig = originalLoadConfig;
+      configModule.mutateConfig = originalMutateConfig;
+      if (originalEnv.provided === undefined) delete process.env.BOOTSTRAP_DB_CREDENTIALS_PROVIDED;
+      else process.env.BOOTSTRAP_DB_CREDENTIALS_PROVIDED = originalEnv.provided;
+      if (originalEnv.user === undefined) delete process.env.BOOTSTRAP_DB_USER;
+      else process.env.BOOTSTRAP_DB_USER = originalEnv.user;
+      if (originalEnv.password === undefined) delete process.env.BOOTSTRAP_DB_PASSWORD;
+      else process.env.BOOTSTRAP_DB_PASSWORD = originalEnv.password;
+      fs.rmSync(stateDir, { recursive: true, force: true });
+    }
+  }
+
+  // ---------------------------------------------------------------
+  section('Database admin - ganti password account row aktual');
+  // ---------------------------------------------------------------
+  {
+    const database = require(path.join(ROOT, 'src/database/database'));
+    const shellModule = require(path.join(ROOT, 'src/utils/shell'));
+    const configModule = require(path.join(ROOT, 'src/config/config'));
+    const originalRunArgs = shellModule.runArgs;
+    const originalCommandExists = shellModule.commandExists;
+    const originalLoadConfig = configModule.loadConfig;
+    const queries = [];
+    try {
+      configModule.loadConfig = () => ({ db_root_user: 'vpsmanager_admin', db_root_password: 'old-password' });
+      shellModule.commandExists = () => true;
+      shellModule.runArgs = (file, args) => {
+        const sql = args[args.indexOf('-e') + 1];
+        queries.push(sql);
+        if (sql === 'SELECT CURRENT_USER();') {
+          return { ok: true, output: 'vpsmanager_admin@127.0.0.1' };
+        }
+        return { ok: true, output: '' };
+      };
+      const result = database.changeRootPassword('new-password');
+      const alterQuery = queries.find((query) => query.startsWith('ALTER USER')) || '';
+      if (
+        result.ok
+        && alterQuery.includes("'vpsmanager_admin'@'127.0.0.1'")
+        && !alterQuery.includes("@'localhost'")
+      ) {
+        ok('Ganti password memakai CURRENT_USER(): akun 127.0.0.1 tidak lagi gagal karena localhost hardcoded');
+      } else {
+        fail('Ganti password masih mengubah host account yang salah', JSON.stringify({ result, queries }));
+      }
+    } finally {
+      shellModule.runArgs = originalRunArgs;
+      shellModule.commandExists = originalCommandExists;
+      configModule.loadConfig = originalLoadConfig;
+    }
+  }
+
+  // ---------------------------------------------------------------
+  section('Configuration API - pasangan user/password admin DB');
+  // ---------------------------------------------------------------
+  {
+    const configModule = require(path.join(ROOT, 'src/config/config'));
+    const database = require(path.join(ROOT, 'src/database/database'));
+    const auditModule = require(path.join(ROOT, 'src/api/audit'));
+    const router = require(path.join(ROOT, 'src/api/routes/config.routes'));
+    const putLayer = router.stack.find((layer) => layer.route?.path === '/' && layer.route.methods.put);
+    const handler = putLayer?.route?.stack?.[0]?.handle;
+    const originals = {
+      loadConfig: configModule.loadConfig,
+      mutateConfig: configModule.mutateConfig,
+      testAdminCredentials: database.testAdminCredentials,
+      changeRootPassword: database.changeRootPassword,
+      recordStart: auditModule.recordStart,
+      recordEnd: auditModule.recordEnd,
+    };
+    let mutateCalls = 0;
+    let changePasswordCalls = 0;
+
+    function responseRecorder() {
+      return {
+        statusCode: 200,
+        payload: null,
+        status(code) { this.statusCode = code; return this; },
+        json(payload) { this.payload = payload; return this; },
+      };
+    }
+
+    try {
+      configModule.loadConfig = () => ({
+        db_root_user: 'root',
+        db_root_password: 'old-secret',
+        api: {},
+        github_accounts: [],
+      });
+      configModule.mutateConfig = (mutator) => {
+        mutateCalls++;
+        const current = configModule.loadConfig();
+        mutator(current);
+        return current;
+      };
+      auditModule.recordStart = () => 'selftest-audit';
+      auditModule.recordEnd = () => {};
+      database.changeRootPassword = () => {
+        changePasswordCalls++;
+        return { ok: true };
+      };
+      database.testAdminCredentials = () => ({ ok: true });
+
+      const missingPasswordRes = responseRecorder();
+      handler(
+        { body: { confirm: true, db_root_user: 'vpsmanager_admin' }, ip: '127.0.0.1' },
+        missingPasswordRes
+      );
+      if (missingPasswordRes.statusCode === 400 && missingPasswordRes.payload?.code === 'DB_CREDENTIALS_REQUIRED' && mutateCalls === 0) {
+        ok('API menolak ganti db_root_user tanpa password baru; config lama tidak disentuh');
+      } else {
+        fail('API masih bisa menyimpan user admin baru dengan password lama', JSON.stringify(missingPasswordRes));
+      }
+
+      const switchRes = responseRecorder();
+      handler(
+        {
+          body: {
+            confirm: true,
+            db_root_user: 'vpsmanager_admin',
+            db_root_password: 'new-existing-secret',
+          },
+          ip: '127.0.0.1',
+        },
+        switchRes
+      );
+      if (switchRes.statusCode === 200 && mutateCalls === 1 && changePasswordCalls === 0) {
+        ok('API switch ke akun existing memvalidasi lalu menyimpan pasangan credential tanpa ALTER USER');
+      } else {
+        fail('API salah mengartikan switch akun sebagai perubahan password server', JSON.stringify({ switchRes, mutateCalls, changePasswordCalls }));
+      }
+    } finally {
+      configModule.loadConfig = originals.loadConfig;
+      configModule.mutateConfig = originals.mutateConfig;
+      database.testAdminCredentials = originals.testAdminCredentials;
+      database.changeRootPassword = originals.changeRootPassword;
+      auditModule.recordStart = originals.recordStart;
+      auditModule.recordEnd = originals.recordEnd;
     }
   }
 

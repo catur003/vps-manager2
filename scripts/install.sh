@@ -19,10 +19,8 @@
 #   sudo INSTALL_DOMAIN=api.zenlab.id INSTALL_DEPLOY_USER=catur \
 #     INSTALL_REPO_URL=https://github.com/catur003/vps-manager2.git \
 #     bash scripts/install.sh
-# Kalau server sudah memakai MySQL dengan password admin custom (root socket
-# tidak tersedia), kirim kredensial existing tanpa mengganti passwordnya:
-#   sudo INSTALL_DB_USER=root INSTALL_DB_PASSWORD='password-existing' \
-#     bash scripts/install.sh
+# Server database existing akan memakai kredensial config yang masih valid
+# atau meminta user/password secara tersembunyi saat instalasi interaktif.
 #
 # Aman dijalankan berkali-kali (idempotent) - tiap step ngecek dulu apa
 # udah beres sebelum ngerjain ulang.
@@ -33,6 +31,26 @@ set -euo pipefail
 if [ "$(id -u)" -ne 0 ]; then
   echo "Script ini wajib dijalankan sebagai root/sudo: sudo bash setup-otomatis.sh" >&2
   exit 1
+fi
+
+# Satu installer pada satu waktu. flock menjadi parent proses installer dan
+# --close mencegah FD lock diwarisi PM2/service jangka panjang. Lock kernel
+# otomatis lepas saat installer exit/crash, jadi tidak ada stale lock file.
+if ! command -v flock >/dev/null 2>&1; then
+  echo "Command flock tidak tersedia (paket util-linux). Installer berhenti sebelum membuat perubahan." >&2
+  exit 1
+fi
+if [ "${VPS_MANAGER_INSTALL_LOCKED:-0}" != "1" ]; then
+  if env VPS_MANAGER_INSTALL_LOCKED=1 flock --close --nonblock --conflict-exit-code 75 \
+    /run/lock/vps-manager-install.lock bash "$0" "$@"; then
+    exit 0
+  else
+    LOCK_STATUS=$?
+    if [ "$LOCK_STATUS" -eq 75 ]; then
+      echo "Installer vps-manager lain masih berjalan. Tunggu proses itu selesai lalu ulangi." >&2
+    fi
+    exit "$LOCK_STATUS"
+  fi
 fi
 
 echo "=================================================="
@@ -122,6 +140,11 @@ export DEBIAN_FRONTEND=noninteractive
 # ada, pakai engine tersebut; MariaDB hanya dipasang pada server tanpa engine.
 DB_ENGINE=""
 if command -v mariadbd >/dev/null 2>&1 \
+  && command -v mysqld >/dev/null 2>&1 \
+  && ! mysqld --version 2>/dev/null | grep -qi mariadb; then
+  echo "ERROR: Binary MariaDB dan MySQL Oracle terdeteksi bersamaan. Installer tidak memilih engine secara otomatis." >&2
+  exit 1
+elif command -v mariadbd >/dev/null 2>&1 \
   || (command -v mysqld >/dev/null 2>&1 && mysqld --version 2>/dev/null | grep -qi mariadb); then
   DB_ENGINE="mariadb"
 elif command -v mysqld >/dev/null 2>&1; then
@@ -132,23 +155,68 @@ DB_CREDENTIALS_PROVIDED=0
 DB_BOOTSTRAP_USER="${INSTALL_DB_USER:-}"
 DB_BOOTSTRAP_PASSWORD="${INSTALL_DB_PASSWORD:-}"
 if [ "${INSTALL_DB_USER+x}" = x ] || [ "${INSTALL_DB_PASSWORD+x}" = x ]; then
-  if [ "${INSTALL_DB_USER+x}" != x ] || [ "${INSTALL_DB_PASSWORD+x}" != x ] || [ -z "$DB_BOOTSTRAP_USER" ]; then
-    echo "ERROR: INSTALL_DB_USER dan INSTALL_DB_PASSWORD wajib diberikan berpasangan (user tidak boleh kosong)." >&2
+  if [ "${INSTALL_DB_USER+x}" != x ] || [ "${INSTALL_DB_PASSWORD+x}" != x ] \
+    || [ -z "$DB_BOOTSTRAP_USER" ] || [ -z "$DB_BOOTSTRAP_PASSWORD" ]; then
+    echo "ERROR: INSTALL_DB_USER dan INSTALL_DB_PASSWORD wajib diberikan berpasangan dan tidak boleh kosong." >&2
     exit 1
   fi
   DB_CREDENTIALS_PROVIDED=1
 fi
 
-DATABASE_PACKAGES=(mariadb-server mariadb-client)
-if [ "$DB_ENGINE" = "mysql" ]; then
-  echo "MySQL existing terdeteksi - MariaDB dilewati; database existing akan dipakai tanpa migrasi engine."
-  DATABASE_PACKAGES=()
-elif [ "$DB_ENGINE" = "mariadb" ]; then
-  echo "MariaDB existing terdeteksi - paket database akan diverifikasi tanpa mengganti engine."
-elif command -v ss >/dev/null 2>&1 \
+DB_STATE_DIR="${INSTALL_STATE_DIR:-/var/lib/vps-manager}"
+DB_STATE_PATH="$DB_STATE_DIR/database-bootstrap.pending"
+DB_MODE="existing"
+
+if [[ "$DB_STATE_DIR" != /* ]] || [ "$DB_STATE_DIR" = "/" ]; then
+  echo "ERROR: INSTALL_STATE_DIR wajib path absolut khusus, bukan root filesystem." >&2
+  exit 1
+fi
+if [ -L "$DB_STATE_DIR" ]; then
+  echo "ERROR: Folder state installer adalah symlink; periksa manual $DB_STATE_DIR." >&2
+  exit 1
+fi
+install -d -m 0700 "$DB_STATE_DIR"
+
+if [ -L "$DB_STATE_PATH" ]; then
+  echo "ERROR: State database adalah symlink; berhenti untuk mencegah penulisan ke target tak terduga." >&2
+  exit 1
+fi
+if [ -e "$DB_STATE_PATH" ] && [ ! -f "$DB_STATE_PATH" ]; then
+  echo "ERROR: State database bukan regular file; periksa manual $DB_STATE_PATH." >&2
+  exit 1
+fi
+if [ -e "$DB_STATE_PATH" ] && [ "$(stat -c '%u' "$DB_STATE_PATH")" -ne 0 ]; then
+  echo "ERROR: State database bukan milik root; periksa manual $DB_STATE_PATH." >&2
+  exit 1
+fi
+if [ -e "$DB_STATE_PATH" ]; then
+  chmod 0600 "$DB_STATE_PATH"
+fi
+
+if [ -z "$DB_ENGINE" ] && command -v ss >/dev/null 2>&1 \
   && ss -H -ltn 'sport = :3306' 2>/dev/null | grep -q .; then
   echo "ERROR: Port 3306 sudah dipakai service/container lain. MariaDB tidak dipasang agar tidak bentrok. Stop atau migrasikan pemakai port 3306 dulu." >&2
   exit 1
+fi
+
+if [ -e "$DB_STATE_PATH" ]; then
+  if [ "$DB_ENGINE" = "mysql" ]; then
+    echo "ERROR: Recovery state mengharapkan MariaDB, tetapi MySQL terdeteksi. Tidak ada database yang diubah." >&2
+    exit 1
+  fi
+  DB_MODE="fresh-mariadb"
+  echo "Melanjutkan setup fresh MariaDB dari recovery state installer."
+elif [ -z "$DB_ENGINE" ]; then
+  install -m 0600 /dev/null "$DB_STATE_PATH"
+  DB_MODE="fresh-mariadb"
+  echo "Belum ada engine database - installer akan memasang fresh MariaDB."
+else
+  echo "${DB_ENGINE^} existing terdeteksi - engine dan database existing tidak akan diubah."
+fi
+
+DATABASE_PACKAGES=()
+if [ "$DB_MODE" = "fresh-mariadb" ]; then
+  DATABASE_PACKAGES=(mariadb-server mariadb-client)
 fi
 apt-get update -y
 apt-get install -y \
@@ -272,39 +340,74 @@ sudo -u "$DEPLOY_USER" bash -c "cd '$REPO_PATH' && npm install"
 # Database disiapkan saat installer masih root. Bootstrap/API setelah ini
 # berjalan sebagai deploy user dan tidak perlu sudo mysql/systemctl yang luas.
 echo "--- Setup database dan konfigurasi awal ---"
-if [ -f "$REPO_PATH/data/config.json" ]; then
+PLATFORM_STATE_PATH="$DB_STATE_DIR/platform-bootstrap.pending"
+if [ -L "$PLATFORM_STATE_PATH" ]; then
+  echo "ERROR: State platform adalah symlink; periksa manual $PLATFORM_STATE_PATH." >&2
+  exit 1
+fi
+if [ -f "$REPO_PATH/data/config.json" ] && [ ! -e "$PLATFORM_STATE_PATH" ]; then
   PRESERVE_PLATFORM_CONFIG=1
 else
   PRESERVE_PLATFORM_CONFIG=0
+  install -m 0600 /dev/null "$PLATFORM_STATE_PATH"
 fi
 
-# Fresh install di atas MySQL existing perlu kredensial admin yang SUDAH
-# ada. Baca password tanpa echo; installer hanya memverifikasi dan menyimpan,
-# tidak mereset root atau membuat akun berprivilege baru secara diam-diam.
-if [ "$DB_ENGINE" = "mysql" ] && [ "$PRESERVE_PLATFORM_CONFIG" -eq 0 ] && [ "$DB_CREDENTIALS_PROVIDED" -eq 0 ]; then
+run_database_bootstrap() {
+  BOOTSTRAP_DEPLOY_USER="$DEPLOY_USER" \
+  BOOTSTRAP_APPS_DIR="$APPS_DIR" \
+  BOOTSTRAP_DOCKER_DIR="$DOCKER_DIR" \
+  BOOTSTRAP_CERTBOT_DIR="$CERTBOT_DIR" \
+  BOOTSTRAP_NGINX_BINARY="$NGINX_BINARY" \
+  BOOTSTRAP_NGINX_CONF_DIR="$NGINX_CONF_DIR" \
+  BOOTSTRAP_NGINX_LOG_DIR="$NGINX_LOG_DIR" \
+  BOOTSTRAP_PRESERVE_PLATFORM_CONFIG="$PRESERVE_PLATFORM_CONFIG" \
+  BOOTSTRAP_DB_MODE="$DB_MODE" \
+  BOOTSTRAP_DB_STATE_PATH="$DB_STATE_PATH" \
+  BOOTSTRAP_DB_CREDENTIALS_PROVIDED="$DB_CREDENTIALS_PROVIDED" \
+  BOOTSTRAP_DB_USER="$DB_BOOTSTRAP_USER" \
+  BOOTSTRAP_DB_PASSWORD="$DB_BOOTSTRAP_PASSWORD" \
+  node "$REPO_PATH/bin/vps-database-bootstrap.js"
+}
+
+if run_database_bootstrap; then
+  DB_BOOTSTRAP_STATUS=0
+else
+  DB_BOOTSTRAP_STATUS=$?
+fi
+
+while [ "$DB_BOOTSTRAP_STATUS" -eq 20 ]; do
   if [ ! -t 0 ]; then
-    echo "ERROR: MySQL existing butuh INSTALL_DB_USER dan INSTALL_DB_PASSWORD pada instalasi non-interaktif." >&2
+    echo "ERROR: Database existing butuh INSTALL_DB_USER dan INSTALL_DB_PASSWORD pada instalasi non-interaktif." >&2
     exit 1
   fi
-  read -rp "User admin MySQL existing [root]: " DB_BOOTSTRAP_USER
-  DB_BOOTSTRAP_USER="${DB_BOOTSTRAP_USER:-root}"
-  read -rsp "Password user admin MySQL existing: " DB_BOOTSTRAP_PASSWORD
+  read -rp "User admin database existing: " DB_BOOTSTRAP_USER
+  if [ -z "$DB_BOOTSTRAP_USER" ]; then
+    echo "ERROR: User admin database tidak boleh kosong." >&2
+    exit 1
+  fi
+  read -rsp "Password user admin database existing: " DB_BOOTSTRAP_PASSWORD
   echo
+  if [ -z "$DB_BOOTSTRAP_PASSWORD" ]; then
+    echo "ERROR: Password admin database tidak boleh kosong." >&2
+    exit 1
+  fi
   DB_CREDENTIALS_PROVIDED=1
+  if run_database_bootstrap; then
+    DB_BOOTSTRAP_STATUS=0
+  else
+    DB_BOOTSTRAP_STATUS=$?
+  fi
+done
+
+if [ "$DB_BOOTSTRAP_STATUS" -ne 0 ]; then
+  exit "$DB_BOOTSTRAP_STATUS"
 fi
 
-BOOTSTRAP_DEPLOY_USER="$DEPLOY_USER" \
-BOOTSTRAP_APPS_DIR="$APPS_DIR" \
-BOOTSTRAP_DOCKER_DIR="$DOCKER_DIR" \
-BOOTSTRAP_CERTBOT_DIR="$CERTBOT_DIR" \
-BOOTSTRAP_NGINX_BINARY="$NGINX_BINARY" \
-BOOTSTRAP_NGINX_CONF_DIR="$NGINX_CONF_DIR" \
-BOOTSTRAP_NGINX_LOG_DIR="$NGINX_LOG_DIR" \
-BOOTSTRAP_PRESERVE_PLATFORM_CONFIG="$PRESERVE_PLATFORM_CONFIG" \
-BOOTSTRAP_DB_CREDENTIALS_PROVIDED="$DB_CREDENTIALS_PROVIDED" \
-BOOTSTRAP_DB_USER="$DB_BOOTSTRAP_USER" \
-BOOTSTRAP_DB_PASSWORD="$DB_BOOTSTRAP_PASSWORD" \
-node "$REPO_PATH/bin/vps-database-bootstrap.js"
+if [ "$DB_MODE" = "fresh-mariadb" ]; then
+  rm -f -- "$DB_STATE_PATH"
+fi
+rm -f -- "$PLATFORM_STATE_PATH"
+unset DB_BOOTSTRAP_PASSWORD
 chown -R "$DEPLOY_USER:$DEPLOY_USER" "$REPO_PATH"
 
 # --- 9. npm link (biar command 'vps-manager' bisa dipanggil global) ---

@@ -15,9 +15,9 @@ Yang dibutuhkan:
 - Clone dari home user SSH biasa, jangan dari `/root`.
 
 Perlu diketahui bahwa installer akan memasang paket sistem, mengaktifkan UFW,
-memasang dan mengamankan MariaDB, menulis rule sudoers scoped, serta membuat
-service PM2. Semua itu dilakukan setelah perintah installer dijalankan dengan
-`sudo`.
+menulis rule sudoers scoped, serta membuat service PM2. MariaDB hanya dipasang
+jika belum ada engine database. MySQL/MariaDB existing dipertahankan dan wajib
+memakai kredensial admin TCP yang sudah ada.
 
 ## 2. Instalasi otomatis
 
@@ -39,6 +39,8 @@ Installer menanyakan:
 1. Deploy user. Default-nya user SSH yang menjalankan `sudo`.
 2. Domain panel. Kosongkan untuk akses langsung melalui
    `https://IP_VPS:4001`.
+3. User/password admin database jika MySQL/MariaDB existing belum punya
+   kredensial valid di konfigurasi panel. Password dibaca tanpa echo.
 
 Script idempotent: kalau koneksi terminal terputus atau suatu langkah gagal,
 masuk lagi ke folder repository lalu jalankan perintah yang sama.
@@ -65,8 +67,8 @@ sudo INSTALL_DEPLOY_USER=ubuntu \
 
 Installer otomatis:
 
-1. Memasang Node.js LTS, PM2, Nginx, Certbot, MariaDB, UFW, Fail2ban, dan
-   build tools.
+1. Memasang Node.js LTS, PM2, Nginx, Certbot, UFW, Fail2ban, dan build tools.
+   MariaDB hanya ditambahkan pada server yang belum memiliki engine database.
 2. Membuat deploy user bila belum ada. User baru dibuat tanpa password login.
 3. Membuat folder:
    - `/opt/apps` untuk project biasa.
@@ -76,8 +78,10 @@ Installer otomatis:
 5. Memasang dependency Node dan mencoba memasang command global
    `vps-manager`.
 6. Menulis rule sudoers scoped yang dibutuhkan panel.
-7. Mengaktifkan serta mengamankan MariaDB. Password root acak disimpan dalam
-   `data/config.json` dengan permission `600`.
+7. Memakai MySQL/MariaDB existing tanpa mengubah akun atau database. Pada
+   fresh MariaDB, installer membuat akun lokal `vpsmanager_admin@127.0.0.1`
+   dengan recovery state; autentikasi root tidak diubah. Kredensial panel
+   disimpan dalam `data/config.json` dengan permission `600`.
 8. Membuat setup token administrator yang berlaku 24 jam dan sekali pakai.
 9. Menjalankan API dengan PM2 dan mendaftarkannya agar aktif lagi setelah
    reboot.
@@ -175,7 +179,7 @@ Konfigurasi tersimpan di `data/config.json`:
   "certbot_webroot": "/opt/certbot",
   "certbot_email": "",
   "db_root_user": "root",
-  "db_root_password": "(dibuat otomatis)",
+  "db_root_password": "(kredensial admin database)",
   "backup_dir": "/www/backup_manager",
   "backup_retention_days": 7
 }

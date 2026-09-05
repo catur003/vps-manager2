@@ -23,6 +23,12 @@ if (!preservePlatformConfig) {
 
 const result = database.setupRootDatabase();
 if (!result.ok) {
+  if (result.needsCredentials) {
+    if (process.env.BOOTSTRAP_DB_CREDENTIALS_PROVIDED === '1') {
+      console.error(result.errorMessage || 'Kredensial admin database tidak valid.');
+    }
+    process.exit(20);
+  }
   console.error(result.errorMessage || 'Setup database gagal.');
   process.exit(1);
 }

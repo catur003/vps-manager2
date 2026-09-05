@@ -129,18 +129,43 @@ router.put('/', (req, res) => {
   if ('db_root_password' in auditParams) auditParams.db_root_password = '(redacted)';
   const auditId = audit.recordStart({ action: ACTION, ip: req.ip, params: auditParams });
 
+  const currentCfg = config.loadConfig();
+  const dbUserChanged =
+    Object.prototype.hasOwnProperty.call(updates, 'db_root_user')
+    && updates.db_root_user !== currentCfg.db_root_user;
+
+  // Mengganti user berarti memilih akun existing lain, bukan mengganti nama
+  // account MySQL. Wajib kirim password dan validasi pasangan baru sebelum
+  // config disimpan. Ini mencegah user baru tersimpan bersama password lama.
+  if (dbUserChanged) {
+    if (!Object.prototype.hasOwnProperty.call(updates, 'db_root_password') || !updates.db_root_password) {
+      const message = 'Mengganti db_root_user wajib menyertakan db_root_password untuk akun baru.';
+      audit.recordEnd(auditId, { success: false, message, durationMs: Date.now() - startedAt });
+      return res.status(400).json({ success: false, message, code: 'DB_CREDENTIALS_REQUIRED' });
+    }
+    const credentialCheck = database.testAdminCredentials(updates.db_root_user, updates.db_root_password);
+    if (!credentialCheck.ok) {
+      audit.recordEnd(auditId, { success: false, message: credentialCheck.errorMessage, durationMs: Date.now() - startedAt });
+      return res.status(400).json({
+        success: false,
+        message: `Kredensial admin database baru tidak valid: ${credentialCheck.errorMessage}`,
+        code: 'DB_CREDENTIALS_INVALID',
+      });
+    }
+  }
+
   // db_root_password diganti DUA-DUANYA sekaligus: config.json DAN MariaDB
   // nyata (via ALTER USER, autentikasi pakai password LAMA dari cfg saat
   // ini). Ini nyegah desync yang pernah kejadian - config.json nyimpen
   // password yang gak match kenyataan di server, jadi semua fitur database
   // di panel gagal konek walau kelihatannya "udah disimpan".
-  if ('db_root_password' in updates) {
+  if ('db_root_password' in updates && !dbUserChanged) {
     const dbResult = database.changeRootPassword(updates.db_root_password);
     if (!dbResult.ok) {
       audit.recordEnd(auditId, { success: false, message: dbResult.errorMessage, durationMs: Date.now() - startedAt });
       return res.status(400).json({
         success: false,
-        message: `Gagal ganti password di MariaDB (config TIDAK disimpan, biar gak desync): ${dbResult.errorMessage}`,
+        message: `Gagal ganti password admin database (config TIDAK disimpan, biar gak desync): ${dbResult.errorMessage}`,
         code: 'DB_PASSWORD_CHANGE_FAILED',
       });
     }

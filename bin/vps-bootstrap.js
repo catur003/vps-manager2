@@ -109,13 +109,16 @@ async function main() {
 
   // 1/6 - Database
   logger.section('1/6 - Setup Database');
-  const dbResult = database.setupRootDatabase();
+  // Database sudah diprovision satu kali sebagai root oleh
+  // vps-database-bootstrap.js. Tahap ini hanya memverifikasi config; jangan
+  // mengulang install/create/alter dengan privilege deploy user.
+  const dbResult = database.configuredAdminCredentials();
   if (!dbResult.ok) {
-    logger.error(`Gagal setup database: ${dbResult.errorMessage}`);
-    logger.warn('Bootstrap berhenti di sini - benerin manual dulu, lalu jalankan ulang script ini (aman diulang).');
+    logger.error(`Verifikasi database gagal: ${dbResult.errorMessage}`);
+    logger.warn('Bootstrap berhenti; database tidak diubah pada tahap verifikasi ini.');
     process.exit(1);
   }
-  logger.success(dbResult.message);
+  logger.success(`Kredensial admin database tervalidasi (user "${dbResult.user}").`);
 
   // 2/6 - Auth web. API key sekarang opsional dan dibuat setelah login.
   logger.section('2/6 - Setup Administrator');
