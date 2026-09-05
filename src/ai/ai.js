@@ -114,6 +114,24 @@ function findTool(name) {
   return TOOL_DEFS.find((t) => t.name === name) || null;
 }
 
+function sanitizeAssistantMessage(message) {
+  const clean = {
+    role: 'assistant',
+    content: message?.content ?? null,
+  };
+  if (Array.isArray(message?.tool_calls)) {
+    clean.tool_calls = message.tool_calls.map((call) => ({
+      id: call.id,
+      type: call.type || 'function',
+      function: {
+        name: call.function?.name,
+        arguments: call.function?.arguments || '{}',
+      },
+    }));
+  }
+  return clean;
+}
+
 async function callProvider(messages) {
   const { baseUrl, apiKey, model } = aiConfig();
   if (!baseUrl) return { ok: false, errorMessage: 'ai_base_url belum diset di Configuration > AI Assistant.' };
@@ -130,7 +148,9 @@ async function callProvider(messages) {
   const json = await res.json().catch(() => null);
   const choice = json?.choices?.[0];
   if (!choice) return { ok: false, errorMessage: 'Response provider AI gak sesuai format OpenAI (choices kosong).' };
-  return { ok: true, message: choice.message };
+  // Provider tertentu mengirim reasoning_content / reasoning pada message.
+  // Jangan teruskan chain-of-thought mentah ke browser atau histori client.
+  return { ok: true, message: sanitizeAssistantMessage(choice.message) };
 }
 
 const MAX_TOOL_ROUNDS = 6;

@@ -5,6 +5,7 @@ const security = require('../security/security');
 const registry = require('../registry/registry');
 const pm2 = require('../pm2/pm2');
 const nginx = require('../nginx/nginx');
+const config = require('../config/config');
 const { extractPortFromTarget } = require('../menu/helpers');
 
 /**
@@ -123,6 +124,10 @@ function scanPorts() {
     });
 
   const knownPortStrings = new Set(projectChecks.map((c) => String(c.port)));
+  const apiConfig = config.loadConfig().api || {};
+  [apiConfig.port, apiConfig.public_port]
+    .filter((port) => port !== undefined && port !== null && port !== '')
+    .forEach((port) => knownPortStrings.add(String(port)));
   const orphanPorts = openPorts
     .filter((p) => !knownPortStrings.has(p.port))
     .map((p) => {

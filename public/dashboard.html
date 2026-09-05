@@ -4178,13 +4178,19 @@ async function openTablePreview(dbName, tableName) {
     `;
   } catch (e) { area.innerHTML = `<div class="empty">Gagal ambil data tabel: ${e.message}</div>`; }
 }
-async function resetDbPassword(dbName) {
-  const dbUser = prompt(`Reset password user database untuk "${dbName}" — masukkan nama user MySQL-nya:`);
-  if (!dbUser) return;
-  try {
-    const result = await api(`/database/${encodeURIComponent(dbName)}/reset-password`, { method: 'POST', body: JSON.stringify({ dbUser }) });
-    alert('Password baru:\n\n' + (result.connectionUrl || JSON.stringify(result)));
-  } catch (e) { toast('Gagal reset: ' + e.message, 'error'); }
+function resetDbPassword(dbName) {
+  showInputModal({
+    title: `Reset password database "${dbName}"`,
+    label: 'Nama user MySQL',
+    placeholder: 'mis. myapp_user',
+    confirmLabel: 'Reset Password',
+    onConfirm: async (dbUser) => {
+      try {
+        const result = await api(`/database/${encodeURIComponent(dbName)}/reset-password`, { method: 'POST', body: JSON.stringify({ dbUser }) });
+        alert('Password baru:\n\n' + (result.connectionUrl || JSON.stringify(result)));
+      } catch (e) { toast('Gagal reset: ' + e.message, 'error'); }
+    },
+  });
 }
 function deleteDb(name) {
   showConfirmModal({
@@ -4318,13 +4324,19 @@ password: ${result.password}</pre>
     `;
   } catch (e) { toast('Gagal buat database: ' + e.message, 'error'); }
 }
-async function resetPgPassword(dbName) {
-  const dbUser = prompt(`Reset password user PostgreSQL untuk database "${dbName}" - masukkan nama usernya:`);
-  if (!dbUser) return;
-  try {
-    const result = await api(`/postgres/${encodeURIComponent(dbName)}/reset-password`, { method: 'POST', body: JSON.stringify({ dbUser }) });
-    alert('Password baru untuk user "' + dbUser + '":\n\n' + result.password);
-  } catch (e) { toast('Gagal reset: ' + e.message, 'error'); }
+function resetPgPassword(dbName) {
+  showInputModal({
+    title: `Reset password PostgreSQL "${dbName}"`,
+    label: 'Nama user PostgreSQL',
+    placeholder: 'mis. myapp_user',
+    confirmLabel: 'Reset Password',
+    onConfirm: async (dbUser) => {
+      try {
+        const result = await api(`/postgres/${encodeURIComponent(dbName)}/reset-password`, { method: 'POST', body: JSON.stringify({ dbUser }) });
+        alert('Password baru untuk user "' + dbUser + '":\n\n' + result.password);
+      } catch (e) { toast('Gagal reset: ' + e.message, 'error'); }
+    },
+  });
 }
 function deletePg(name) {
   const dbUser = prompt(`Hapus database "${name}" - masukkan nama user pemiliknya (biar role-nya ikut dihapus, kosongkan kalau gak tau):`) || '';

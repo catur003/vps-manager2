@@ -80,6 +80,21 @@ function createServer() {
   // jadi satu "IP" yang sama alih-alih per-client - salah satu bisa
   // ke-lockout gara-gara orang lain gagal login.
   app.set('trust proxy', 'loopback');
+
+  // Defense-in-depth untuk akses langsung ke app (bukan cuma lewat nginx).
+  // Dashboard masih satu file dengan inline CSS/JS, jadi keduanya sementara
+  // diizinkan di CSP sampai asset dipisah ke file sendiri.
+  app.use((req, res, next) => {
+    res.set({
+      'Content-Security-Policy': "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' ws: wss: https:; media-src 'self' blob: https:; font-src 'self' data:",
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+    });
+    if (req.secure) res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    next();
+  });
   // `verify` nyimpen body mentah SEBELUM di-parse JSON - dibutuhin buat
   // verifikasi HMAC signature webhook GitHub (webhook.routes.js), karena
   // signature-nya dihitung dari byte mentah body, bukan dari objek hasil
@@ -172,7 +187,18 @@ function createServer() {
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
     logger.error(`[API] Unhandled error di ${req.method} ${req.path}: ${err.stack || err.message}`);
-    res.status(500).json({ success: false, message: 'Terjadi kesalahan internal di server.', code: 'INTERNAL_ERROR' });
+    if (err.type === 'entity.too.large' || err.status === 413) {
+      return res.status(413).json({ success: false, message: 'Payload terlalu besar (maksimal 6MB).', code: 'PAYLOAD_TOO_LARGE' });
+    }
+    if (err.type === 'entity.parse.failed' || (err instanceof SyntaxError && err.status === 400)) {
+      return res.status(400).json({ success: false, message: 'Body JSON tidak valid.', code: 'INVALID_JSON' });
+    }
+    const status = Number.isInteger(err.status) && err.status >= 400 && err.status < 500 ? err.status : 500;
+    res.status(status).json({
+      success: false,
+      message: status === 500 ? 'Terjadi kesalahan internal di server.' : 'Request tidak valid.',
+      code: status === 500 ? 'INTERNAL_ERROR' : 'BAD_REQUEST',
+    });
   });
 
   return app;

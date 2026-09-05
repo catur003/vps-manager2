@@ -1,6 +1,5 @@
 const pty = require('node-pty');
 const { WebSocketServer } = require('ws');
-const url = require('url');
 const shell = require('../utils/shell');
 const { authenticateUpgrade } = require('./middleware/auth');
 
@@ -39,10 +38,11 @@ function attachDockerExecServer(httpServer) {
   wss.on('close', () => clearInterval(pingInterval));
 
   httpServer.on('upgrade', (req, socket, head) => {
-    const { pathname, query } = url.parse(req.url, true);
+    const parsedUrl = new URL(req.url, 'http://localhost');
+    const pathname = parsedUrl.pathname;
     if (pathname !== '/docker-exec') return;
 
-    if (!authenticateUpgrade(req, query.key)) {
+    if (!authenticateUpgrade(req, parsedUrl.searchParams.get('key'))) {
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();
       return;
@@ -52,13 +52,13 @@ function attachDockerExecServer(httpServer) {
       socket.destroy();
       return;
     }
-    const container = query.container || '';
+    const container = parsedUrl.searchParams.get('container') || '';
     if (!container || !CONTAINER_NAME_REGEX.test(container) || !isRealContainer(container)) {
       socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
       socket.destroy();
       return;
     }
-    const requestedShell = query.shell === 'bash' ? 'bash' : 'sh';
+    const requestedShell = parsedUrl.searchParams.get('shell') === 'bash' ? 'bash' : 'sh';
 
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req, { container, requestedShell }));
   });

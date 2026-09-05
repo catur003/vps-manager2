@@ -1,7 +1,6 @@
 const os = require('os');
 const pty = require('node-pty');
 const { WebSocketServer } = require('ws');
-const url = require('url');
 const { authenticateUpgrade } = require('./middleware/auth');
 const config = require('../config/config');
 
@@ -54,10 +53,11 @@ function attachTerminalServer(httpServer) {
   wss.on('close', () => clearInterval(pingInterval));
 
   httpServer.on('upgrade', (req, socket, head) => {
-    const { pathname, query } = url.parse(req.url, true);
+    const parsedUrl = new URL(req.url, 'http://localhost');
+    const pathname = parsedUrl.pathname;
     if (pathname !== '/terminal') return; // biarin path lain (kalau ada ws lain nanti) gak kesenggol
 
-    if (!authenticateUpgrade(req, query.key)) {
+    if (!authenticateUpgrade(req, parsedUrl.searchParams.get('key'))) {
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();
       return;
@@ -67,7 +67,7 @@ function attachTerminalServer(httpServer) {
       socket.destroy();
       return;
     }
-    const requestedUser = query.user || PROCESS_USER;
+    const requestedUser = parsedUrl.searchParams.get('user') || PROCESS_USER;
     if (requestedUser !== PROCESS_USER && !ALLOWED_OTHER_USERS.includes(requestedUser)) {
       socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
       socket.destroy();

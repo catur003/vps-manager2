@@ -5,13 +5,23 @@ const config = require('../../config/config');
 const audit = require('../audit');
 
 const router = express.Router();
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, message: 'Terlalu banyak percobaan. Coba lagi dalam 15 menit.', code: 'TOO_MANY_ATTEMPTS' },
-});
+function createAttemptLimiter(max = 10) {
+  return rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    // Request sukses tidak boleh menghabiskan jatah percobaan auth.
+    skipSuccessfulRequests: true,
+    message: { success: false, message: 'Terlalu banyak percobaan gagal. Coba lagi dalam 15 menit.', code: 'TOO_MANY_ATTEMPTS' },
+  });
+}
+
+// Store dipisah supaya kegagalan login tidak memblokir pengelolaan API key
+// dari sesi admin yang sudah sah (dan sebaliknya).
+const setupLimiter = createAttemptLimiter();
+const loginLimiter = createAttemptLimiter();
+const sensitiveActionLimiter = createAttemptLimiter();
 
 function sameOrigin(req) {
   const origin = req.get('origin');
@@ -32,7 +42,7 @@ router.get('/status', (req, res) => {
   res.json({ success: true, message: 'OK', data: authStore.status() });
 });
 
-router.post('/setup', authLimiter, (req, res) => {
+router.post('/setup', setupLimiter, (req, res) => {
   if (!sameOrigin(req)) return res.status(403).json({ success: false, message: 'Origin request tidak valid.', code: 'INVALID_ORIGIN' });
   const startedAt = Date.now();
   const auditId = audit.recordStart({ action: 'auth.setup', ip: req.ip, params: { username: req.body?.username } });
@@ -52,7 +62,7 @@ router.post('/setup', authLimiter, (req, res) => {
   }
 });
 
-router.post('/login', authLimiter, (req, res) => {
+router.post('/login', loginLimiter, (req, res) => {
   if (!sameOrigin(req)) return res.status(403).json({ success: false, message: 'Origin request tidak valid.', code: 'INVALID_ORIGIN' });
   const startedAt = Date.now();
   const auditId = audit.recordStart({ action: 'auth.login', ip: req.ip, params: { username: req.body?.username } });
@@ -79,7 +89,7 @@ router.get('/api-keys', (req, res) => {
   res.set('Cache-Control', 'no-store');
   res.json({ success: true, message: 'OK', data: { keys: config.listApiKeys() } });
 });
-router.post('/api-keys', authLimiter, (req, res) => {
+router.post('/api-keys', sensitiveActionLimiter, (req, res) => {
   if (!sameOrigin(req)) return res.status(403).json({ success: false, message: 'Origin request tidak valid.', code: 'INVALID_ORIGIN' });
   const session = requireSession(req, res, true);
   if (!session) return;
@@ -94,7 +104,7 @@ router.post('/api-keys', authLimiter, (req, res) => {
     res.status(err.code === 'API_KEY_NAME_EXISTS' ? 409 : 400).json({ success: false, message: err.message, code: err.code || 'API_KEY_CREATE_FAILED' });
   }
 });
-router.post('/api-keys/:id/reveal', authLimiter, (req, res) => {
+router.post('/api-keys/:id/reveal', sensitiveActionLimiter, (req, res) => {
   if (!sameOrigin(req)) return res.status(403).json({ success: false, message: 'Origin request tidak valid.', code: 'INVALID_ORIGIN' });
   const session = requireSession(req, res, true);
   if (!session) return;
@@ -109,7 +119,7 @@ router.post('/api-keys/:id/reveal', authLimiter, (req, res) => {
     res.status(err.code === 'API_KEY_NOT_FOUND' ? 404 : 400).json({ success: false, message: err.message, code: err.code || 'API_KEY_REVEAL_FAILED' });
   }
 });
-router.delete('/api-keys/:id', authLimiter, (req, res) => {
+router.delete('/api-keys/:id', sensitiveActionLimiter, (req, res) => {
   if (!sameOrigin(req)) return res.status(403).json({ success: false, message: 'Origin request tidak valid.', code: 'INVALID_ORIGIN' });
   const session = requireSession(req, res, true);
   if (!session) return;
@@ -128,7 +138,7 @@ router.get('/api-key/status', (req, res) => {
   res.set('Cache-Control', 'no-store');
   res.json({ success: true, message: 'OK', data: { configured: Boolean(c.key_hash && c.key_salt) } });
 });
-router.post('/api-key', authLimiter, (req, res) => {
+router.post('/api-key', sensitiveActionLimiter, (req, res) => {
   if (!sameOrigin(req)) return res.status(403).json({ success: false, message: 'Origin request tidak valid.', code: 'INVALID_ORIGIN' });
   const session = requireSession(req, res, true);
   if (!session) return;

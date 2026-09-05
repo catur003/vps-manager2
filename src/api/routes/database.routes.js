@@ -311,10 +311,16 @@ router.delete('/:dbName', (req, res) => {
     });
   }
 
-  const startedAt = Date.now();
-  const auditId = audit.recordStart({ action: ACTION_DROP, ip: req.ip, params: { dbName, dbUser } });
+  // Dashboard lama cuma mengirim dbName. Ambil user dari registry supaya
+  // DROP DATABASE tidak meninggalkan akun MySQL yatim. dbUser eksplisit tetap
+  // menang untuk database hasil import/manual yang registry-nya belum lengkap.
+  const registeredDbUser = dbRegistry.findByName(dbName)?.dbUser;
+  const effectiveDbUser = dbUser || registeredDbUser;
 
-  const result = database.dropDatabase(dbName, dbUser);
+  const startedAt = Date.now();
+  const auditId = audit.recordStart({ action: ACTION_DROP, ip: req.ip, params: { dbName, dbUser: effectiveDbUser } });
+
+  const result = database.dropDatabase(dbName, effectiveDbUser);
   if (!result.ok) {
     audit.recordEnd(auditId, { success: false, message: result.errorMessage, durationMs: Date.now() - startedAt });
     return res.status(400).json({ success: false, message: result.errorMessage, code: 'DROP_DATABASE_FAILED' });
